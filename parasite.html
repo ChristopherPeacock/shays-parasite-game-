@@ -14,7 +14,7 @@
   <div id="ui">
     <span>❤ HEALTH: <span id="hval">100</span></span>
     <span id="zone-name">BLOODSTREAM</span>
-    <span>⏱ <span id="tval">0.0s</span></span>
+    <span>🪙 <span id="tokval">500</span> &nbsp;·&nbsp; ⏱ <span id="tval">0.0s</span> &nbsp;·&nbsp; <span style="color:#555;cursor:pointer" onclick="toggleShop()">[S] SHOP</span></span>
   </div>
   <canvas id="game" width="800" height="500"></canvas>
   <div id="message">Arrow keys / WASD · Eat yellow nutrients · Avoid red cells · Enter tubes to travel</div>
@@ -22,14 +22,120 @@
   <script>
     const canvas = document.getElementById('game');
     const ctx = canvas.getContext('2d');
-    let state = 'playing'; // playing | upgrade | dead | spread
+    let state = 'playing'; // playing | upgrade | shop | dead | spread
     let tick = 0;
     let flashTimer = 0;
+
+    // ── Skin Shop ──────────────────────────────────────────────────────────────
+    let tokens = parseInt(localStorage.getItem('parasiteTokens') || '500');
+    let ownedSkins = JSON.parse(localStorage.getItem('parasiteOwned') || '["TOXO"]');
+    let equippedSkin = localStorage.getItem('parasiteEquipped') || 'TOXO';
+    let shopCursor = 0;
+
+    const SKINS = [
+      { id:'TOXO',    name:'TOXOPLASMA',  cost:0,   desc:'The classic crescent',    draw: drawToxo    },
+      { id:'GOLDEN',  name:'GOLDEN CYST', cost:100, desc:'Gilded parasite royalty',  draw: drawGolden  },
+      { id:'NEON',    name:'NEON PULSE',  cost:150, desc:'Electric blue organism',   draw: drawNeon    },
+      { id:'BLOOD',   name:'BLOOD WORM',  cost:200, desc:'Born deep in the veins',   draw: drawBlood   },
+      { id:'SHADOW',  name:'SHADOW CELL', cost:250, desc:'Void parasite from beyond',draw: drawShadow  },
+      { id:'PRISM',   name:'PRISM',       cost:300, desc:'Chromatic mutation',        draw: drawPrism   },
+      { id:'CRYSTAL', name:'CRYSTAL',     cost:350, desc:'Transparent horror',        draw: drawCrystal },
+    ];
+
+    function saveShop(){
+      localStorage.setItem('parasiteTokens', tokens);
+      localStorage.setItem('parasiteOwned', JSON.stringify(ownedSkins));
+      localStorage.setItem('parasiteEquipped', equippedSkin);
+      document.getElementById('tokval').textContent = tokens;
+    }
+
+    function toggleShop(){
+      if(state==='playing') state='shop';
+      else if(state==='shop') state='playing';
+    }
+
+    // ── Skin draw functions (called with ctx already translated+rotated) ────────
+    function drawToxo(){
+      const L=22,W=9;
+      ctx.shadowColor='#66ff44';ctx.shadowBlur=10;
+      ctx.beginPath();ctx.moveTo(L,0);ctx.bezierCurveTo(L*0.4,-W*1.1,-L*0.4,-W*1.15,-L,0);ctx.bezierCurveTo(-L*0.4,W*0.55,L*0.4,W*0.55,L,0);
+      ctx.fillStyle='rgba(60,185,60,0.88)';ctx.fill();ctx.strokeStyle='rgba(130,255,100,0.5)';ctx.lineWidth=1.2;ctx.stroke();ctx.shadowBlur=0;
+      ctx.beginPath();ctx.moveTo(L*0.75,-W*0.15);ctx.bezierCurveTo(L*0.2,-W*0.75,-L*0.2,-W*0.8,-L*0.7,-W*0.1);ctx.bezierCurveTo(-L*0.2,W*0.05,L*0.2,W*0.05,L*0.75,-W*0.15);ctx.fillStyle='rgba(180,255,140,0.2)';ctx.fill();
+      ctx.beginPath();ctx.ellipse(-L*0.25,0,6,4,0,0,Math.PI*2);ctx.fillStyle='rgba(20,90,20,0.85)';ctx.fill();ctx.strokeStyle='rgba(80,200,80,0.5)';ctx.lineWidth=1;ctx.stroke();
+      ctx.beginPath();ctx.arc(L*0.88,0,3.5,0,Math.PI*2);ctx.fillStyle='rgba(220,255,180,0.95)';ctx.fill();
+      [-3,3].forEach(dy=>{ctx.beginPath();ctx.ellipse(-L*0.05,dy,2.5,1.5,-0.3,0,Math.PI*2);ctx.fillStyle='rgba(40,150,40,0.7)';ctx.fill();});
+    }
+    function drawGolden(){
+      const L=22,W=9;
+      ctx.shadowColor='#ffcc00';ctx.shadowBlur=14;
+      ctx.beginPath();ctx.moveTo(L,0);ctx.bezierCurveTo(L*0.4,-W*1.1,-L*0.4,-W*1.15,-L,0);ctx.bezierCurveTo(-L*0.4,W*0.55,L*0.4,W*0.55,L,0);
+      ctx.fillStyle='rgba(200,155,20,0.92)';ctx.fill();ctx.strokeStyle='rgba(255,215,60,0.8)';ctx.lineWidth=1.5;ctx.stroke();ctx.shadowBlur=0;
+      ctx.beginPath();ctx.moveTo(L*0.7,-W*0.2);ctx.bezierCurveTo(L*0.1,-W*0.8,-L*0.2,-W*0.85,-L*0.65,-W*0.15);ctx.bezierCurveTo(-L*0.2,W*0.05,L*0.15,W*0.05,L*0.7,-W*0.2);ctx.fillStyle='rgba(255,240,120,0.35)';ctx.fill();
+      ctx.beginPath();ctx.ellipse(-L*0.25,0,6,4,0,0,Math.PI*2);ctx.fillStyle='rgba(160,100,5,0.9)';ctx.fill();ctx.strokeStyle='rgba(255,200,50,0.6)';ctx.lineWidth=1;ctx.stroke();
+      ctx.beginPath();ctx.arc(L*0.88,0,4,0,Math.PI*2);ctx.fillStyle='rgba(255,240,100,1)';ctx.fill();
+      // crown spikes on top
+      [-8,0,8].forEach(dx=>{ctx.beginPath();ctx.moveTo(dx,-W*0.9);ctx.lineTo(dx-3,-W*1.4);ctx.lineTo(dx+3,-W*1.4);ctx.closePath();ctx.fillStyle='rgba(255,215,50,0.7)';ctx.fill();});
+    }
+    function drawNeon(){
+      const L=22,W=9;
+      ctx.shadowColor='#00ffff';ctx.shadowBlur=18;
+      ctx.beginPath();ctx.moveTo(L,0);ctx.bezierCurveTo(L*0.4,-W*1.1,-L*0.4,-W*1.15,-L,0);ctx.bezierCurveTo(-L*0.4,W*0.55,L*0.4,W*0.55,L,0);
+      ctx.fillStyle='rgba(10,180,220,0.85)';ctx.fill();ctx.strokeStyle='rgba(0,255,255,0.9)';ctx.lineWidth=2;ctx.stroke();ctx.shadowBlur=0;
+      // electric sparks
+      [[L*0.3,-W],[0,-W*1.1],[-L*0.3,-W*0.9]].forEach(([sx,sy])=>{ctx.beginPath();ctx.moveTo(sx,sy);ctx.lineTo(sx+(Math.sin(tick*0.3+sx)*4),sy-5);ctx.strokeStyle='rgba(100,255,255,0.8)';ctx.lineWidth=1.5;ctx.stroke();});
+      ctx.beginPath();ctx.ellipse(-L*0.25,0,5,3.5,0,0,Math.PI*2);ctx.fillStyle='rgba(0,100,140,0.9)';ctx.fill();ctx.strokeStyle='rgba(0,220,255,0.6)';ctx.lineWidth=1;ctx.stroke();
+      ctx.beginPath();ctx.arc(L*0.88,0,4,0,Math.PI*2);ctx.fillStyle='rgba(180,255,255,1)';ctx.fill();
+    }
+    function drawBlood(){
+      const L=26,W=7;
+      ctx.shadowColor='#ff2244';ctx.shadowBlur=12;
+      ctx.beginPath();ctx.moveTo(L,0);ctx.bezierCurveTo(L*0.5,-W,-L*0.5,-W,-L,0);ctx.bezierCurveTo(-L*0.5,W*0.8,L*0.5,W*0.8,L,0);
+      ctx.fillStyle='rgba(180,20,20,0.9)';ctx.fill();ctx.strokeStyle='rgba(255,60,60,0.7)';ctx.lineWidth=1.5;ctx.stroke();ctx.shadowBlur=0;
+      // segmentation lines
+      [-8,0,8].forEach(x=>{ctx.beginPath();ctx.moveTo(x,-W*0.7);ctx.lineTo(x,W*0.7);ctx.strokeStyle='rgba(255,100,100,0.3)';ctx.lineWidth=1;ctx.stroke();});
+      ctx.beginPath();ctx.ellipse(-L*0.2,0,5,3,0,0,Math.PI*2);ctx.fillStyle='rgba(100,5,5,0.9)';ctx.fill();
+      ctx.beginPath();ctx.arc(L*0.9,0,3,0,Math.PI*2);ctx.fillStyle='rgba(255,160,160,0.95)';ctx.fill();
+    }
+    function drawShadow(){
+      const L=22,W=9;
+      ctx.shadowColor='#cc44ff';ctx.shadowBlur=20;
+      ctx.beginPath();ctx.moveTo(L,0);ctx.bezierCurveTo(L*0.4,-W*1.1,-L*0.4,-W*1.15,-L,0);ctx.bezierCurveTo(-L*0.4,W*0.55,L*0.4,W*0.55,L,0);
+      ctx.fillStyle='rgba(40,5,70,0.95)';ctx.fill();ctx.strokeStyle='rgba(180,60,255,0.8)';ctx.lineWidth=1.5;ctx.stroke();ctx.shadowBlur=0;
+      // void tendrils
+      [[L*0.2,W*0.5],[-L*0.1,W*0.6],[-L*0.3,W*0.3]].forEach(([tx,ty])=>{ctx.beginPath();ctx.moveTo(tx,ty);ctx.lineTo(tx+Math.sin(tick*0.05+tx)*3,ty+6);ctx.strokeStyle='rgba(150,50,220,0.5)';ctx.lineWidth=1;ctx.stroke();});
+      ctx.beginPath();ctx.ellipse(-L*0.25,0,7,5,0,0,Math.PI*2);ctx.fillStyle='rgba(120,30,200,0.6)';ctx.fill();
+      ctx.beginPath();ctx.arc(L*0.88,0,4,0,Math.PI*2);ctx.fillStyle='rgba(220,180,255,0.95)';ctx.fill();
+    }
+    function drawPrism(){
+      const L=22,W=9,hue=(tick*2)%360;
+      ctx.shadowColor=`hsl(${hue},100%,60%)`;ctx.shadowBlur=14;
+      ctx.beginPath();ctx.moveTo(L,0);ctx.bezierCurveTo(L*0.4,-W*1.1,-L*0.4,-W*1.15,-L,0);ctx.bezierCurveTo(-L*0.4,W*0.55,L*0.4,W*0.55,L,0);
+      ctx.fillStyle=`hsla(${hue},90%,45%,0.88)`;ctx.fill();ctx.strokeStyle=`hsla(${(hue+60)%360},100%,70%,0.8)`;ctx.lineWidth=1.5;ctx.stroke();ctx.shadowBlur=0;
+      ctx.beginPath();ctx.ellipse(-L*0.25,0,6,4,0,0,Math.PI*2);ctx.fillStyle=`hsla(${(hue+180)%360},80%,25%,0.9)`;ctx.fill();
+      ctx.beginPath();ctx.arc(L*0.88,0,4,0,Math.PI*2);ctx.fillStyle=`hsla(${(hue+90)%360},100%,85%,1)`;ctx.fill();
+    }
+    function drawCrystal(){
+      const L=22,W=9;
+      ctx.shadowColor='#aaddff';ctx.shadowBlur=16;
+      ctx.beginPath();ctx.moveTo(L,0);ctx.bezierCurveTo(L*0.4,-W*1.1,-L*0.4,-W*1.15,-L,0);ctx.bezierCurveTo(-L*0.4,W*0.55,L*0.4,W*0.55,L,0);
+      ctx.fillStyle='rgba(180,220,255,0.35)';ctx.fill();ctx.strokeStyle='rgba(200,240,255,0.9)';ctx.lineWidth=2;ctx.stroke();ctx.shadowBlur=0;
+      // facet lines
+      [[L*0.5,0],[0,-W*0.5],[-L*0.4,0]].forEach(([fx,fy])=>{ctx.beginPath();ctx.moveTo(L,0);ctx.lineTo(fx,fy);ctx.strokeStyle='rgba(220,245,255,0.3)';ctx.lineWidth=1;ctx.stroke();});
+      ctx.beginPath();ctx.ellipse(-L*0.25,0,5,3,0,0,Math.PI*2);ctx.fillStyle='rgba(100,160,220,0.7)';ctx.fill();ctx.strokeStyle='rgba(200,240,255,0.8)';ctx.lineWidth=1;ctx.stroke();
+      ctx.beginPath();ctx.arc(L*0.88,0,4,0,Math.PI*2);ctx.fillStyle='rgba(255,255,255,0.98)';ctx.fill();
+    }
 
     // ── Timer ──────────────────────────────────────────────────────────────────
     let startTime = Date.now();
     let elapsedMs = 0;
     let bestTime = parseFloat(localStorage.getItem('parasiteBest') || '0');
+
+    // ── Token economy ──────────────────────────────────────────────────────────
+    const TOKEN_PER_ZONE   = 15;  // earned each time you clear a zone
+    const TOKEN_WIN_BONUS  = 50;  // bonus for completing all 5
+    const TOKEN_SPEED_MAX  = 100; // up to 100 extra for fast clears (sub-60s = full)
+    let tokensEarnedThisRun = 0;
+    let lastZoneTokens = 0; // shown on upgrade screen
 
     // ── Upgrades ───────────────────────────────────────────────────────────────
     let infectionPerNutrient = 1;
@@ -58,12 +164,25 @@
     }
 
     document.addEventListener('keydown', e => {
-      if (state === 'upgrade') {
-        const n = parseInt(e.key);
-        if (n >= 1 && n <= upgradeOptions.length) {
-          upgradeOptions[n-1].apply();
-          state = 'playing';
+      if(e.key==='s'||e.key==='S') { toggleShop(); return; }
+
+      if(state==='shop'){
+        if(e.key==='ArrowRight') shopCursor=(shopCursor+1)%SKINS.length;
+        else if(e.key==='ArrowLeft') shopCursor=(shopCursor-1+SKINS.length)%SKINS.length;
+        else if(e.key==='ArrowDown') shopCursor=Math.min(SKINS.length-1,shopCursor+4);
+        else if(e.key==='ArrowUp') shopCursor=Math.max(0,shopCursor-4);
+        else if(e.key==='Enter'||e.key===' '){
+          const sk=SKINS[shopCursor];
+          if(ownedSkins.includes(sk.id)){ equippedSkin=sk.id; saveShop(); }
+          else if(tokens>=sk.cost){ tokens-=sk.cost; ownedSkins.push(sk.id); equippedSkin=sk.id; saveShop(); }
         }
+        else if(e.key==='Escape') state='playing';
+        return;
+      }
+
+      if(state==='upgrade'){
+        const n=parseInt(e.key);
+        if(n>=1&&n<=upgradeOptions.length){ upgradeOptions[n-1].apply(); state='playing'; }
       }
     });
 
@@ -237,8 +356,9 @@
       infectionPerNutrient=1;wbcSlowFactor=1;playerArmor=false;playerRegen=false;
       player.x=400;player.y=250;player.health=100;player.infection=0;player.inv=0;player.angle=0;player.speed=3.2;
       portals=makePortals();buildBG();refillNutrients();refillWBCs();wbcTimer=0;
-      startTime=Date.now();elapsedMs=0;state='playing';
+      startTime=Date.now();elapsedMs=0;tokensEarnedThisRun=0;state='playing';
       document.getElementById('zone-name').textContent=zone.name;
+      document.getElementById('tokval').textContent=tokens;
     }
 
     document.addEventListener('keydown',e=>{
@@ -247,7 +367,7 @@
 
     // ── Update ─────────────────────────────────────────────────────────────────
     function update(){
-      if(state==='upgrade'||state==='dead'||state==='spread') return;
+      if(state==='upgrade'||state==='shop'||state==='dead'||state==='spread') return;
       tick++;
       if(flashTimer>0) flashTimer--;
       elapsedMs=Date.now()-startTime;
@@ -281,7 +401,11 @@
           player.infection=Math.min(100,player.infection+infectionPerNutrient);
           if(zonePools[zoneIndex]>0) spawnNutrient();
           else {
-            // Zone cleared — offer upgrade
+            // Zone cleared — earn tokens + offer upgrade
+            lastZoneTokens = TOKEN_PER_ZONE;
+            tokens += lastZoneTokens;
+            tokensEarnedThisRun += lastZoneTokens;
+            saveShop();
             pickUpgrades();
             state='upgrade';
             document.getElementById('zone-name').textContent=zone.name+' ✓';
@@ -311,6 +435,10 @@
       if(player.infection>=100){
         const t=elapsedMs/1000;
         if(!bestTime||t<bestTime){bestTime=t;localStorage.setItem('parasiteBest',t);}
+        // Speed bonus: 100 tokens for sub-60s, scales down to 0 at 300s
+        const speedBonus=Math.max(0,Math.round(TOKEN_SPEED_MAX*Math.max(0,(300-t)/240)));
+        const winBonus=TOKEN_WIN_BONUS+speedBonus;
+        tokens+=winBonus; tokensEarnedThisRun+=winBonus; saveShop();
         state='spread';
       }
 
@@ -394,17 +522,11 @@
         ctx.beginPath();ctx.arc(w.x+3,w.y+3,w.r*0.25,0,Math.PI*2);ctx.fillStyle='#ff6688';ctx.fill();
       });
 
-      // Toxoplasma player
+      // Player — active skin
       if(player.inv<=0||tick%8<4){
         ctx.save();ctx.translate(player.x,player.y);ctx.rotate(player.angle);
-        const L=22,W=9;
-        ctx.shadowColor='#66ff44';ctx.shadowBlur=10;
-        ctx.beginPath();ctx.moveTo(L,0);ctx.bezierCurveTo(L*0.4,-W*1.1,-L*0.4,-W*1.15,-L,0);ctx.bezierCurveTo(-L*0.4,W*0.55,L*0.4,W*0.55,L,0);
-        ctx.fillStyle='rgba(60,185,60,0.88)';ctx.fill();ctx.strokeStyle='rgba(130,255,100,0.5)';ctx.lineWidth=1.2;ctx.stroke();ctx.shadowBlur=0;
-        ctx.beginPath();ctx.moveTo(L*0.75,-W*0.15);ctx.bezierCurveTo(L*0.2,-W*0.75,-L*0.2,-W*0.8,-L*0.7,-W*0.1);ctx.bezierCurveTo(-L*0.2,W*0.05,L*0.2,W*0.05,L*0.75,-W*0.15);ctx.fillStyle='rgba(180,255,140,0.2)';ctx.fill();
-        ctx.beginPath();ctx.ellipse(-L*0.25,0,6,4,0,0,Math.PI*2);ctx.fillStyle='rgba(20,90,20,0.85)';ctx.fill();ctx.strokeStyle='rgba(80,200,80,0.5)';ctx.lineWidth=1;ctx.stroke();
-        ctx.beginPath();ctx.arc(L*0.88,0,3.5,0,Math.PI*2);ctx.fillStyle='rgba(220,255,180,0.95)';ctx.fill();
-        [-3,3].forEach(dy=>{ctx.beginPath();ctx.ellipse(-L*0.05,dy,2.5,1.5,-0.3,0,Math.PI*2);ctx.fillStyle='rgba(40,150,40,0.7)';ctx.fill();});
+        const sk=SKINS.find(s=>s.id===equippedSkin)||SKINS[0];
+        sk.draw();
         ctx.restore();
       }
 
@@ -431,8 +553,9 @@
       if(state==='upgrade'){
         ctx.fillStyle='rgba(0,0,0,0.82)';ctx.fillRect(0,0,800,500);
         ctx.textAlign='center';
-        ctx.font='bold 22px monospace';ctx.fillStyle='#88ff44';ctx.fillText('ZONE CLEARED — EVOLVE',400,80);
-        ctx.font='13px monospace';ctx.fillStyle='#555';ctx.fillText('Press 1, 2 or 3 to choose an upgrade',400,108);
+        ctx.font='bold 22px monospace';ctx.fillStyle='#88ff44';ctx.fillText('ZONE CLEARED — EVOLVE',400,68);
+        ctx.font='13px monospace';ctx.fillStyle='#ffcc44';ctx.fillText(`+${lastZoneTokens} 🪙 tokens earned · total this run: ${tokensEarnedThisRun}`,400,92);
+        ctx.font='12px monospace';ctx.fillStyle='#555';ctx.fillText('Press 1, 2 or 3 to choose an upgrade',400,112);
         upgradeOptions.forEach((u,i)=>{
           const bx=80+i*220,by=150,bw=200,bh=120;
           ctx.fillStyle='rgba(30,50,20,0.9)';ctx.fillRect(bx,by,bw,bh);
@@ -448,24 +571,76 @@
         ctx.textAlign='left';
       }
 
+      // ── Skin Shop overlay ──────────────────────────────────────────────────
+      if(state==='shop'){
+        ctx.fillStyle='rgba(0,0,0,0.88)';ctx.fillRect(0,0,800,500);
+        ctx.textAlign='center';
+        ctx.font='bold 22px monospace';ctx.fillStyle='#ffcc44';ctx.fillText('PARASITE SHOP',400,36);
+        ctx.font='12px monospace';ctx.fillStyle='#555';ctx.fillText('← → navigate · ENTER buy/equip · S or ESC close',400,58);
+        ctx.font='11px monospace';ctx.fillStyle='#888';ctx.fillText(`🪙 ${tokens} tokens`,400,78);
+
+        // 4 per row
+        SKINS.forEach((sk,i)=>{
+          const col=i%4, row=Math.floor(i/4);
+          const bw=168,bh=130,gap=12;
+          const totalW=4*(bw+gap)-gap, startX=(800-totalW)/2;
+          const bx=startX+col*(bw+gap), by=100+row*(bh+gap);
+          const owned=ownedSkins.includes(sk.id);
+          const equipped=equippedSkin===sk.id;
+          const selected=shopCursor===i;
+          const canAfford=tokens>=sk.cost;
+
+          // card bg
+          ctx.fillStyle=equipped?'rgba(50,80,20,0.9)':owned?'rgba(20,40,60,0.9)':'rgba(20,20,30,0.9)';
+          ctx.fillRect(bx,by,bw,bh);
+          // border
+          ctx.strokeStyle=selected?'#ffcc44':equipped?'#88ff44':owned?'#4488cc':'rgba(60,60,60,0.8)';
+          ctx.lineWidth=selected?3:1.5;ctx.strokeRect(bx,by,bw,bh);
+
+          // skin preview (mini draw)
+          ctx.save();ctx.translate(bx+bw/2,by+52);ctx.scale(0.8,0.8);
+          sk.draw();
+          ctx.restore();
+
+          // name
+          ctx.fillStyle=equipped?'#88ff44':owned?'#aaccff':'#cccccc';
+          ctx.font='bold 10px monospace';ctx.textAlign='center';
+          ctx.fillText(sk.name,bx+bw/2,by+88);
+
+          // status / cost
+          if(equipped){ ctx.fillStyle='#44ff44';ctx.font='10px monospace';ctx.fillText('EQUIPPED',bx+bw/2,by+103); }
+          else if(owned){ ctx.fillStyle='#66aaff';ctx.font='10px monospace';ctx.fillText('OWNED · ENTER equip',bx+bw/2,by+103); }
+          else{
+            ctx.fillStyle=canAfford?'#ffcc44':'#884422';
+            ctx.font='10px monospace';
+            ctx.fillText(sk.cost===0?'FREE':`🪙 ${sk.cost}`,bx+bw/2,by+103);
+            if(!canAfford){ctx.fillStyle='#553322';ctx.font='9px monospace';ctx.fillText('not enough tokens',bx+bw/2,by+116);}
+          }
+        });
+        ctx.textAlign='left';
+      }
+
       // Dead / Win overlays
       if(state==='dead'){
         ctx.fillStyle='rgba(0,0,0,0.78)';ctx.fillRect(0,0,800,500);
         ctx.textAlign='center';
-        ctx.font='bold 50px monospace';ctx.fillStyle='#ff2244';ctx.fillText('HOST REJECTED YOU',400,190);
-        ctx.font='18px monospace';ctx.fillStyle='#888';ctx.fillText('The immune system destroyed you.',400,240);
-        ctx.font='14px monospace';ctx.fillStyle='#555';ctx.fillText(`Time: ${(elapsedMs/1000).toFixed(1)}s`,400,275);
-        ctx.fillText('Press R to try again',400,310);
+        ctx.font='bold 46px monospace';ctx.fillStyle='#ff2244';ctx.fillText('HOST REJECTED YOU',400,170);
+        ctx.font='17px monospace';ctx.fillStyle='#888';ctx.fillText('The immune system destroyed you.',400,215);
+        ctx.font='14px monospace';ctx.fillStyle='#555';ctx.fillText(`Time: ${(elapsedMs/1000).toFixed(1)}s`,400,248);
+        if(tokensEarnedThisRun>0){ctx.fillStyle='#ffcc44';ctx.font='14px monospace';ctx.fillText(`+${tokensEarnedThisRun} 🪙 tokens saved · total: ${tokens}`,400,275);}
+        ctx.fillStyle='#444';ctx.fillText('Press R to try again',400,310);
         ctx.textAlign='left';
       }
       if(state==='spread'){
         ctx.fillStyle='rgba(0,0,0,0.78)';ctx.fillRect(0,0,800,500);
         ctx.textAlign='center';
-        ctx.font='bold 50px monospace';ctx.fillStyle='#44ff88';ctx.fillText('HOST FULLY INFECTED',400,160);
+        ctx.font='bold 46px monospace';ctx.fillStyle='#44ff88';ctx.fillText('HOST FULLY INFECTED',400,145);
         const t=elapsedMs/1000;
-        ctx.font='20px monospace';ctx.fillStyle='#aaffcc';ctx.fillText(`Time: ${t.toFixed(1)}s`,400,210);
-        if(bestTime&&t<=bestTime){ctx.fillStyle='#ffdd44';ctx.fillText(`BEST TIME: ${bestTime.toFixed(1)}s`,400,244);}
-        ctx.font='14px monospace';ctx.fillStyle='#555';ctx.fillText('Press R to infect again',400,290);
+        ctx.font='18px monospace';ctx.fillStyle='#aaffcc';ctx.fillText(`Time: ${t.toFixed(1)}s`,400,185);
+        if(bestTime&&t<=bestTime){ctx.fillStyle='#ffdd44';ctx.font='15px monospace';ctx.fillText(`NEW BEST: ${bestTime.toFixed(1)}s`,400,212);}
+        ctx.fillStyle='#ffcc44';ctx.font='15px monospace';ctx.fillText(`+${tokensEarnedThisRun} 🪙 tokens earned this run`,400,242);
+        ctx.fillStyle='#aaffcc';ctx.font='13px monospace';ctx.fillText(`Bank: ${tokens} tokens total · Press S to spend them`,400,268);
+        ctx.fillStyle='#444';ctx.font='13px monospace';ctx.fillText('Press R to infect again',400,300);
         ctx.textAlign='left';
       }
     }
