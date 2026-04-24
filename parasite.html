@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>PARASITE</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #000; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; font-family: monospace; color: #fff; }
+    #ui { width: 800px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-size: 13px; }
+    #zone-name { font-size: 14px; letter-spacing: 3px; color: #aaa; }
+    #message { margin-top: 8px; font-size: 12px; color: #333; }
+  </style>
+</head>
+<body>
+  <div id="ui">
+    <span>❤ HEALTH: <span id="hval">100</span></span>
+    <span id="zone-name">BLOODSTREAM</span>
+    <span>⏱ <span id="tval">0.0s</span></span>
+  </div>
+  <canvas id="game" width="800" height="500"></canvas>
+  <div id="message">Arrow keys / WASD · Eat yellow nutrients · Avoid red cells · Enter tubes to travel</div>
+
+  <script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    let state = 'playing'; // playing | upgrade | dead | spread
+    let tick = 0;
+    let flashTimer = 0;
+
+    // ── Timer ──────────────────────────────────────────────────────────────────
+    let startTime = Date.now();
+    let elapsedMs = 0;
+    let bestTime = parseFloat(localStorage.getItem('parasiteBest') || '0');
+
+    // ── Upgrades ───────────────────────────────────────────────────────────────
+    let infectionPerNutrient = 1;
+    let wbcSlowFactor = 1;
+    let playerArmor = false;
+    let playerRegen = false;
+    let upgradeOptions = [];
+
+    const UPGRADE_POOL = [
+      { name: 'SPEED BOOST',    desc: 'Move 25% faster',              apply: () => { player.speed *= 1.25; } },
+      { name: 'THICK MEMBRANE', desc: 'Restore 30 health',            apply: () => { player.health = Math.min(100, player.health + 30); } },
+      { name: 'RAPID INVASION', desc: 'Nutrients give +2% each',      apply: () => { infectionPerNutrient = 2; } },
+      { name: 'CELL ARMOR',     desc: 'Take 50% less damage',         apply: () => { playerArmor = true; } },
+      { name: 'REGENERATION',   desc: 'Slowly heal over time',        apply: () => { playerRegen = true; } },
+      { name: 'CAMOUFLAGE',     desc: 'WBCs move 30% slower',         apply: () => { wbcSlowFactor = 0.7; } },
+      { name: 'BLITZ CYST',     desc: 'Temporary invincibility 3×',   apply: () => { player.inv = 180; } },
+    ];
+
+    function pickUpgrades() {
+      const pool = [...UPGRADE_POOL];
+      upgradeOptions = [];
+      for (let i = 0; i < 3 && pool.length; i++) {
+        const idx = Math.floor(Math.random() * pool.length);
+        upgradeOptions.push(pool.splice(idx, 1)[0]);
+      }
+    }
+
+    document.addEventListener('keydown', e => {
+      if (state === 'upgrade') {
+        const n = parseInt(e.key);
+        if (n >= 1 && n <= upgradeOptions.length) {
+          upgradeOptions[n-1].apply();
+          state = 'playing';
+        }
+      }
+    });
+
+    // ── Organ SVGs ─────────────────────────────────────────────────────────────
+    const ORGAN_SVGS = [
+      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500">
+        <circle cx="400" cy="250" r="230" fill="#3a0010" opacity="0.55"/>
+        <circle cx="400" cy="250" r="195" fill="#180008" opacity="0.6"/>
+        <circle cx="400" cy="250" r="160" fill="#8B0000" opacity="0.22"/>
+        <ellipse cx="340" cy="210" rx="40" ry="24" fill="#cc2040" opacity="0.45" transform="rotate(-15,340,210)"/>
+        <ellipse cx="340" cy="210" rx="18" ry="10" fill="#330010" opacity="0.55" transform="rotate(-15,340,210)"/>
+        <ellipse cx="430" cy="255" rx="40" ry="24" fill="#cc2040" opacity="0.45" transform="rotate(10,430,255)"/>
+        <ellipse cx="430" cy="255" rx="18" ry="10" fill="#330010" opacity="0.55" transform="rotate(10,430,255)"/>
+        <ellipse cx="360" cy="295" rx="38" ry="22" fill="#cc2040" opacity="0.45" transform="rotate(-5,360,295)"/>
+        <ellipse cx="360" cy="295" rx="17" ry="9"  fill="#330010" opacity="0.55" transform="rotate(-5,360,295)"/>
+        <ellipse cx="460" cy="200" rx="34" ry="20" fill="#cc2040" opacity="0.4"  transform="rotate(20,460,200)"/>
+        <ellipse cx="460" cy="200" rx="15" ry="8"  fill="#330010" opacity="0.5"  transform="rotate(20,460,200)"/>
+        <circle cx="400" cy="250" r="230" fill="none" stroke="#6a0020" stroke-width="18" opacity="0.35"/>
+        <circle cx="400" cy="250" r="195" fill="none" stroke="#4a0015" stroke-width="12" opacity="0.3"/>
+      </svg>`,
+      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500">
+        <rect x="388" y="20" width="24" height="90" rx="12" fill="#1a3a5c" opacity="0.5"/>
+        <path d="M388,105 Q310,125 250,170" stroke="#1a3a5c" stroke-width="16" fill="none" opacity="0.5" stroke-linecap="round"/>
+        <path d="M412,105 Q490,125 550,170" stroke="#1a3a5c" stroke-width="16" fill="none" opacity="0.5" stroke-linecap="round"/>
+        <path d="M250,170 Q185,200 150,250 Q120,305 135,360 Q150,410 200,430 Q255,448 300,430 Q345,410 355,360 Q365,300 340,240 Q315,180 270,165Z" fill="#0a2040" opacity="0.5" stroke="#1a4070" stroke-width="2"/>
+        <path d="M130,265 Q195,250 355,268" stroke="#1a4070" stroke-width="2.5" fill="none" opacity="0.35"/>
+        <path d="M125,310 Q192,296 355,313" stroke="#1a4070" stroke-width="2.5" fill="none" opacity="0.35"/>
+        <path d="M550,170 Q615,200 650,250 Q680,305 665,360 Q650,410 600,430 Q545,448 500,430 Q455,410 445,360 Q435,300 460,240 Q485,180 530,165Z" fill="#0a2040" opacity="0.5" stroke="#1a4070" stroke-width="2"/>
+        <path d="M670,265 Q605,250 445,268" stroke="#1a4070" stroke-width="2.5" fill="none" opacity="0.35"/>
+        <path d="M675,310 Q608,296 445,313" stroke="#1a4070" stroke-width="2.5" fill="none" opacity="0.35"/>
+      </svg>`,
+      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500">
+        <ellipse cx="370" cy="230" rx="300" ry="190" fill="#2a1a3a" opacity="0.5"/>
+        <path d="M100,195 Q150,170 200,195 Q250,220 300,195 Q350,170 400,195 Q450,220 500,195 Q550,170 600,195 Q640,215 660,210" stroke="#7040b0" stroke-width="9" fill="none" opacity="0.45" stroke-linecap="round"/>
+        <path d="M82,230 Q135,207 188,230 Q240,253 293,230 Q345,207 398,230 Q450,253 503,230 Q555,207 608,230 Q648,248 665,244" stroke="#7040b0" stroke-width="9" fill="none" opacity="0.45" stroke-linecap="round"/>
+        <path d="M75,268 Q128,245 182,268 Q235,291 289,268 Q342,245 396,268 Q449,291 503,268 Q556,245 610,268 Q648,283 665,280" stroke="#7040b0" stroke-width="8" fill="none" opacity="0.4" stroke-linecap="round"/>
+        <ellipse cx="595" cy="370" rx="100" ry="72" fill="#1e1230" opacity="0.5"/>
+        <rect x="348" y="398" width="36" height="72" rx="18" fill="#1e1230" opacity="0.45"/>
+      </svg>`,
+      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500">
+        <path d="M400,460 C280,385 100,310 100,190 C100,105 160,55 230,55 C278,55 320,80 400,130 C480,80 522,55 570,55 C640,55 700,105 700,190 C700,310 520,385 400,460Z" fill="#1a0005" opacity="0.45" stroke="#6a0015" stroke-width="3"/>
+        <line x1="400" y1="100" x2="400" y2="430" stroke="#8a0020" stroke-width="6" opacity="0.45"/>
+        <path d="M145,210 Q270,195 400,202 Q530,195 655,210" stroke="#8a0020" stroke-width="4" fill="none" opacity="0.4"/>
+        <ellipse cx="490" cy="165" rx="90" ry="60" fill="#2a0010" opacity="0.28"/>
+        <ellipse cx="310" cy="165" rx="90" ry="60" fill="#2a0010" opacity="0.28"/>
+        <path d="M335,90 Q340,40 375,28 Q405,18 415,50 Q422,75 408,100" stroke="#7a0018" stroke-width="20" fill="none" opacity="0.45" stroke-linecap="round"/>
+      </svg>`,
+      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500">
+        <rect x="375" y="10" width="30" height="100" rx="15" fill="#1a3a0a" opacity="0.5"/>
+        <path d="M375,105 Q255,115 215,185 Q175,258 185,330 Q195,395 255,435 Q315,468 385,460 Q460,450 510,415 Q565,375 575,315 Q588,248 560,185 Q530,125 460,108 Q415,95 375,105Z" fill="#0f2008" opacity="0.52" stroke="#2a5010" stroke-width="3"/>
+        <path d="M218,210 Q310,194 420,205 Q490,212 560,225" stroke="#2d5a12" stroke-width="5" fill="none" opacity="0.4" stroke-linecap="round"/>
+        <path d="M205,255 Q298,239 415,250 Q488,257 562,272" stroke="#2d5a12" stroke-width="5" fill="none" opacity="0.4" stroke-linecap="round"/>
+        <path d="M196,302 Q292,286 414,297 Q488,304 562,320" stroke="#2d5a12" stroke-width="5" fill="none" opacity="0.38" stroke-linecap="round"/>
+        <ellipse cx="385" cy="420" rx="140" ry="30" fill="#1a4a00" opacity="0.18"/>
+      </svg>`,
+    ];
+    const organImgs = ORGAN_SVGS.map(svg => {
+      const img = new Image();
+      img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+      return img;
+    });
+
+    // ── Zones ──────────────────────────────────────────────────────────────────
+    const ZONES = [
+      { name: 'BLOODSTREAM', bg: '#0f0408', wbcSpeed: 1.0, wbcMax: 10 },
+      { name: 'LUNGS',       bg: '#060d18', wbcSpeed: 0.8, wbcMax: 7  },
+      { name: 'BRAIN',       bg: '#0d0b14', wbcSpeed: 1.5, wbcMax: 14 },
+      { name: 'HEART',       bg: '#100404', wbcSpeed: 1.8, wbcMax: 16 },
+      { name: 'STOMACH',     bg: '#080f06', wbcSpeed: 0.6, wbcMax: 6  },
+    ];
+    let zonePools = [20,20,20,20,20];
+    let zoneIndex = 0;
+    let zone = ZONES[0];
+
+    // Body map organ positions (icons drawn at bottom-center HUD)
+    // Each: { label, cx, cy } relative to body map origin
+    const BODY_MAP = [
+      { label:'BRAIN',       cx:0,   cy:-38 },
+      { label:'LUNGS',       cx:0,   cy:-18 },
+      { label:'HEART',       cx:-10, cy:-10 },
+      { label:'STOMACH',     cx:0,   cy:4   },
+      { label:'BLOODSTREAM', cx:0,   cy:20  },
+    ];
+
+    // ── Background geometry ────────────────────────────────────────────────────
+    let bgData = {};
+    function buildBG() {
+      bgData = {};
+      switch(zoneIndex) {
+        case 0:
+          bgData.vessels = Array.from({length:5},()=>({x1:Math.random()*800,y1:Math.random()*500,x2:Math.random()*800,y2:Math.random()*500,w:40+Math.random()*60}));
+          bgData.rbcs = Array.from({length:20},()=>({x:Math.random()*800,y:Math.random()*500,rx:10+Math.random()*8,ry:5+Math.random()*4,angle:Math.random()*Math.PI,drift:(Math.random()-0.5)*0.4}));
+          break;
+        case 1: bgData.alveoli=Array.from({length:35},()=>({x:30+Math.random()*740,y:30+Math.random()*440,r:8+Math.random()*14})); break;
+        case 2: bgData.synapses=Array.from({length:28},()=>({x:Math.random()*800,y:Math.random()*500,r:2+Math.random()*3})); break;
+        case 3: bgData.striations=Array.from({length:30},(_,i)=>({y:i*18,len:600+Math.random()*200,offset:Math.random()*40})); break;
+        case 4: bgData.bubbles=Array.from({length:35},()=>({x:Math.random()*800,y:80+Math.random()*360,r:3+Math.random()*8,phase:Math.random()*Math.PI*2})); break;
+      }
+    }
+    buildBG();
+
+    function drawBG() {
+      ctx.fillStyle=zone.bg; ctx.fillRect(0,0,800,500);
+      const img=organImgs[zoneIndex];
+      if(img.complete){ctx.globalAlpha=0.28;ctx.drawImage(img,0,0,800,500);ctx.globalAlpha=1;}
+      switch(zoneIndex){
+        case 0: bgData.rbcs.forEach(r=>{r.x+=r.drift;if(r.x>820)r.x=-20;if(r.x<-20)r.x=820;ctx.save();ctx.translate(r.x,r.y);ctx.rotate(r.angle);ctx.beginPath();ctx.ellipse(0,0,r.rx,r.ry,0,0,Math.PI*2);ctx.fillStyle='rgba(180,20,40,0.12)';ctx.fill();ctx.restore();}); break;
+        case 2: bgData.synapses.forEach(s=>{const g=0.25+Math.sin(tick*0.03+s.x)*0.12;ctx.beginPath();ctx.arc(s.x,s.y,s.r,0,Math.PI*2);ctx.fillStyle=`rgba(160,80,255,${g})`;ctx.fill();}); break;
+        case 3: ctx.fillStyle=`rgba(200,10,10,${0.04+Math.sin(tick*0.08)*0.06})`;ctx.fillRect(0,0,800,500); break;
+        case 4: bgData.bubbles.forEach(b=>{b.y-=0.15;b.phase+=0.02;if(b.y<60){b.y=440;b.x=Math.random()*800;}ctx.beginPath();ctx.arc(b.x+Math.sin(b.phase)*3,b.y,b.r,0,Math.PI*2);ctx.strokeStyle='rgba(100,220,40,0.13)';ctx.lineWidth=1.5;ctx.stroke();}); break;
+      }
+    }
+
+    // ── Portals / Tubes ────────────────────────────────────────────────────────
+    function makePortals() {
+      const prev=(zoneIndex-1+ZONES.length)%ZONES.length;
+      const next=(zoneIndex+1)%ZONES.length;
+      const lbl=i=>ZONES[i].name+(zonePools[i]===0?' ✓':` (${zonePools[i]})`);
+      return [
+        {x:38,  y:250,destIndex:prev,label:lbl(prev),pulse:0},
+        {x:762, y:250,destIndex:next,label:lbl(next),pulse:Math.PI},
+      ];
+    }
+    let portals = makePortals();
+
+    // ── Player ─────────────────────────────────────────────────────────────────
+    const player = {x:400,y:250,r:11,speed:3.2,health:100,infection:0,inv:0,angle:0};
+    const keys = {};
+    document.addEventListener('keydown', e=>{keys[e.key]=true;});
+    document.addEventListener('keyup',   e=>{keys[e.key]=false;});
+
+    // ── Nutrients ──────────────────────────────────────────────────────────────
+    let nutrients = [];
+    function spawnNutrient(){
+      if(zonePools[zoneIndex]<=0) return;
+      nutrients.push({x:80+Math.random()*640,y:40+Math.random()*420,r:5+Math.random()*5,pulse:Math.random()*Math.PI*2});
+    }
+    function refillNutrients(){nutrients=[];const c=Math.min(zonePools[zoneIndex],8);for(let i=0;i<c;i++)spawnNutrient();}
+    refillNutrients();
+
+    // ── WBCs ───────────────────────────────────────────────────────────────────
+    let wbcs=[];
+    function spawnWBC(){
+      const side=Math.floor(Math.random()*4);let x,y;
+      if(side===0){x=Math.random()*800;y=-20;}
+      else if(side===1){x=820;y=Math.random()*500;}
+      else if(side===2){x=Math.random()*800;y=520;}
+      else{x=-20;y=Math.random()*500;}
+      wbcs.push({x,y,r:14,speed:(0.9+Math.random()*0.8)*zone.wbcSpeed*wbcSlowFactor,wobble:Math.random()*Math.PI*2});
+    }
+    function refillWBCs(){wbcs=[];for(let i=0;i<4;i++)spawnWBC();}
+    refillWBCs();
+
+    let wbcTimer=0;
+    function dist(a,b){return Math.sqrt((a.x-b.x)**2+(a.y-b.y)**2);}
+
+    // ── Zone enter ─────────────────────────────────────────────────────────────
+    function enterZone(index){
+      zoneIndex=index;zone=ZONES[zoneIndex];
+      portals=makePortals();buildBG();
+      refillNutrients();refillWBCs();wbcTimer=0;
+      player.x=400;player.y=250;player.inv=60;
+      flashTimer=25;
+      const cl=zonePools[zoneIndex]===0?' ✓':'';
+      document.getElementById('zone-name').textContent=zone.name+cl;
+    }
+
+    function reset(){
+      zoneIndex=0;zone=ZONES[0];
+      zonePools=[20,20,20,20,20];
+      infectionPerNutrient=1;wbcSlowFactor=1;playerArmor=false;playerRegen=false;
+      player.x=400;player.y=250;player.health=100;player.infection=0;player.inv=0;player.angle=0;player.speed=3.2;
+      portals=makePortals();buildBG();refillNutrients();refillWBCs();wbcTimer=0;
+      startTime=Date.now();elapsedMs=0;state='playing';
+      document.getElementById('zone-name').textContent=zone.name;
+    }
+
+    document.addEventListener('keydown',e=>{
+      if((e.key==='r'||e.key==='R')&&(state==='dead'||state==='spread')) reset();
+    });
+
+    // ── Update ─────────────────────────────────────────────────────────────────
+    function update(){
+      if(state==='upgrade'||state==='dead'||state==='spread') return;
+      tick++;
+      if(flashTimer>0) flashTimer--;
+      elapsedMs=Date.now()-startTime;
+
+      // Movement
+      const ml=(keys['ArrowLeft'] ||keys['a']||keys['A'])?1:0;
+      const mr=(keys['ArrowRight']||keys['d']||keys['D'])?1:0;
+      const mu=(keys['ArrowUp']   ||keys['w']||keys['W'])?1:0;
+      const md=(keys['ArrowDown'] ||keys['s']||keys['S'])?1:0;
+      const mvx=mr-ml,mvy=md-mu;
+      if(mvx!==0||mvy!==0) player.angle=Math.atan2(mvy,mvx);
+      player.x+=mvx*player.speed;player.y+=mvy*player.speed;
+      player.x=Math.max(player.r,Math.min(800-player.r,player.x));
+      player.y=Math.max(player.r,Math.min(500-player.r,player.y));
+
+      // Regen
+      if(playerRegen&&tick%90===0) player.health=Math.min(100,player.health+1);
+
+      // Tubes
+      portals=makePortals();
+      portals.forEach(p=>{
+        p.pulse+=0.05;
+        if(dist(player,p)<player.r+28) enterZone(p.destIndex);
+      });
+
+      // Nutrients
+      nutrients=nutrients.filter(n=>{
+        n.pulse+=0.06;
+        if(dist(player,n)<player.r+n.r){
+          zonePools[zoneIndex]=Math.max(0,zonePools[zoneIndex]-1);
+          player.infection=Math.min(100,player.infection+infectionPerNutrient);
+          if(zonePools[zoneIndex]>0) spawnNutrient();
+          else {
+            // Zone cleared — offer upgrade
+            pickUpgrades();
+            state='upgrade';
+            document.getElementById('zone-name').textContent=zone.name+' ✓';
+          }
+          return false;
+        }
+        return true;
+      });
+      // Keep 8 nutrients on screen while the zone pool still has food
+      while(nutrients.length<8&&zonePools[zoneIndex]>nutrients.length) spawnNutrient();
+
+      // WBCs
+      wbcTimer++;
+      if(wbcTimer>220&&wbcs.length<zone.wbcMax){spawnWBC();wbcTimer=0;}
+      wbcs.forEach(w=>{
+        w.wobble+=0.08;
+        const dx=player.x-w.x,dy=player.y-w.y,d=Math.sqrt(dx*dx+dy*dy)||1;
+        w.x+=(dx/d)*w.speed+Math.sin(w.wobble)*0.4;
+        w.y+=(dy/d)*w.speed+Math.cos(w.wobble)*0.4;
+        if(player.inv<=0&&dist(player,w)<player.r+w.r-3){
+          const dmg=playerArmor?3.5:7;
+          player.health-=dmg;player.inv=55;
+          if(player.health<=0){player.health=0;state='dead';}
+        }
+      });
+      if(player.inv>0) player.inv--;
+      if(player.infection>=100){
+        const t=elapsedMs/1000;
+        if(!bestTime||t<bestTime){bestTime=t;localStorage.setItem('parasiteBest',t);}
+        state='spread';
+      }
+
+      document.getElementById('hval').textContent=Math.max(0,Math.ceil(player.health));
+      document.getElementById('tval').textContent=(elapsedMs/1000).toFixed(1)+'s';
+    }
+
+    // ── Draw body map ──────────────────────────────────────────────────────────
+    function drawBodyMap(){
+      // Small human silhouette at bottom center
+      const ox=400,oy=484;
+      // Head
+      ctx.beginPath();ctx.arc(ox,oy-50,8,0,Math.PI*2);
+      ctx.strokeStyle='rgba(100,100,100,0.5)';ctx.lineWidth=1.5;ctx.stroke();
+      // Torso
+      ctx.beginPath();ctx.rect(ox-9,oy-42,18,35);
+      ctx.strokeStyle='rgba(100,100,100,0.5)';ctx.lineWidth=1.5;ctx.stroke();
+      // Legs
+      ctx.beginPath();ctx.moveTo(ox-9,oy-7);ctx.lineTo(ox-9,oy+12);
+      ctx.moveTo(ox+9,oy-7);ctx.lineTo(ox+9,oy+12);
+      ctx.strokeStyle='rgba(100,100,100,0.5)';ctx.lineWidth=1.5;ctx.stroke();
+
+      // Organ dots — light up when cleared
+      const organs = [
+        {zi:2, x:ox,    y:oy-46, label:'BRAIN'},     // brain (head)
+        {zi:1, x:ox-6,  y:oy-32, label:'LUNGS'},     // lungs (upper torso)
+        {zi:3, x:ox+4,  y:oy-28, label:'HEART'},     // heart (upper torso right)
+        {zi:0, x:ox,    y:oy-20, label:'BLOOD'},     // bloodstream (mid torso)
+        {zi:4, x:ox,    y:oy-10, label:'STOMACH'},   // stomach (lower torso)
+      ];
+      organs.forEach(o=>{
+        const cleared=zonePools[o.zi]===0;
+        const current=zoneIndex===o.zi;
+        ctx.beginPath();ctx.arc(o.x,o.y,4,0,Math.PI*2);
+        if(cleared) ctx.fillStyle='rgba(60,220,80,0.9)';
+        else if(current) ctx.fillStyle='rgba(255,220,60,0.9)';
+        else ctx.fillStyle='rgba(80,80,80,0.6)';
+        ctx.fill();
+        if(cleared){ctx.strokeStyle='rgba(60,220,80,0.5)';ctx.lineWidth=1.5;ctx.stroke();}
+      });
+
+      // Cleared count
+      const cleared=zonePools.filter(p=>p===0).length;
+      ctx.fillStyle='rgba(100,180,100,0.7)';ctx.font='9px monospace';
+      ctx.textAlign='center';ctx.fillText(`${cleared}/5`,ox,oy+20);ctx.textAlign='left';
+    }
+
+    // ── Draw ───────────────────────────────────────────────────────────────────
+    function draw(){
+      drawBG();
+
+      if(flashTimer>0){ctx.fillStyle=`rgba(255,255,255,${flashTimer/25*0.35})`;ctx.fillRect(0,0,800,500);}
+
+      // Tubes
+      portals.forEach((p,i)=>{
+        const isLeft=i===0,tw=38,th=60,cx=p.x,cy=p.y,pulse=Math.sin(p.pulse)*3;
+        const cleared=zonePools[p.destIndex]===0;
+        const tc=cleared?'80,200,80':'160,100,40';
+        ctx.beginPath();ctx.ellipse(cx,cy,tw,th+pulse,0,0,Math.PI*2);ctx.fillStyle=`rgba(${tc},0.55)`;ctx.fill();
+        ctx.strokeStyle=`rgba(${tc},0.9)`;ctx.lineWidth=4;ctx.stroke();
+        for(let d=1;d<=4;d++){const sc=1-d*0.18;ctx.beginPath();ctx.ellipse(cx,cy,tw*sc,th*sc+pulse*0.5,0,0,Math.PI*2);ctx.strokeStyle=`rgba(${tc},${0.5-d*0.1})`;ctx.lineWidth=2;ctx.stroke();}
+        const tg=ctx.createRadialGradient(cx,cy,0,cx,cy,tw*0.6);tg.addColorStop(0,'rgba(0,0,0,0.95)');tg.addColorStop(1,'rgba(0,0,0,0)');
+        ctx.beginPath();ctx.ellipse(cx,cy,tw*0.6,th*0.6+pulse,0,0,Math.PI*2);ctx.fillStyle=tg;ctx.fill();
+        const dir=isLeft?1:-1;
+        for(let f=0;f<3;f++){const fp=((tick*0.04+f*0.33)%1);const fx=cx+dir*(tw+(fp*55));ctx.beginPath();ctx.moveTo(cx+dir*tw,cy+(f-1)*16);ctx.lineTo(cx+dir*(tw+50),cy+(f-1)*16);ctx.strokeStyle=`rgba(${tc},${0.15*(1-fp)})`;ctx.lineWidth=2;ctx.stroke();ctx.beginPath();ctx.arc(fx,cy+(f-1)*16,2.5,0,Math.PI*2);ctx.fillStyle=`rgba(${tc},${0.6*(1-fp)})`;ctx.fill();}
+        ctx.fillStyle=cleared?'rgba(80,220,80,0.9)':'rgba(210,170,100,0.85)';ctx.font='bold 10px monospace';ctx.textAlign='center';ctx.fillText(p.label,cx,cy-th-10);ctx.textAlign='left';
+      });
+
+      // Nutrients
+      nutrients.forEach(n=>{
+        const sc=1+Math.sin(n.pulse)*0.18;
+        const g=ctx.createRadialGradient(n.x,n.y,0,n.x,n.y,n.r*2.5*sc);
+        g.addColorStop(0,'rgba(255,230,60,0.95)');g.addColorStop(0.5,'rgba(255,160,20,0.5)');g.addColorStop(1,'rgba(255,100,0,0)');
+        ctx.beginPath();ctx.arc(n.x,n.y,n.r*sc,0,Math.PI*2);ctx.fillStyle=g;ctx.fill();
+      });
+
+      // WBCs
+      wbcs.forEach(w=>{
+        ctx.beginPath();ctx.arc(w.x,w.y,w.r,0,Math.PI*2);ctx.fillStyle='#c41e3a';ctx.fill();
+        ctx.beginPath();ctx.arc(w.x-3,w.y-2,w.r*0.45,0,Math.PI*2);ctx.fillStyle='#ff4466';ctx.fill();
+        ctx.beginPath();ctx.arc(w.x+3,w.y+3,w.r*0.25,0,Math.PI*2);ctx.fillStyle='#ff6688';ctx.fill();
+      });
+
+      // Toxoplasma player
+      if(player.inv<=0||tick%8<4){
+        ctx.save();ctx.translate(player.x,player.y);ctx.rotate(player.angle);
+        const L=22,W=9;
+        ctx.shadowColor='#66ff44';ctx.shadowBlur=10;
+        ctx.beginPath();ctx.moveTo(L,0);ctx.bezierCurveTo(L*0.4,-W*1.1,-L*0.4,-W*1.15,-L,0);ctx.bezierCurveTo(-L*0.4,W*0.55,L*0.4,W*0.55,L,0);
+        ctx.fillStyle='rgba(60,185,60,0.88)';ctx.fill();ctx.strokeStyle='rgba(130,255,100,0.5)';ctx.lineWidth=1.2;ctx.stroke();ctx.shadowBlur=0;
+        ctx.beginPath();ctx.moveTo(L*0.75,-W*0.15);ctx.bezierCurveTo(L*0.2,-W*0.75,-L*0.2,-W*0.8,-L*0.7,-W*0.1);ctx.bezierCurveTo(-L*0.2,W*0.05,L*0.2,W*0.05,L*0.75,-W*0.15);ctx.fillStyle='rgba(180,255,140,0.2)';ctx.fill();
+        ctx.beginPath();ctx.ellipse(-L*0.25,0,6,4,0,0,Math.PI*2);ctx.fillStyle='rgba(20,90,20,0.85)';ctx.fill();ctx.strokeStyle='rgba(80,200,80,0.5)';ctx.lineWidth=1;ctx.stroke();
+        ctx.beginPath();ctx.arc(L*0.88,0,3.5,0,Math.PI*2);ctx.fillStyle='rgba(220,255,180,0.95)';ctx.fill();
+        [-3,3].forEach(dy=>{ctx.beginPath();ctx.ellipse(-L*0.05,dy,2.5,1.5,-0.3,0,Math.PI*2);ctx.fillStyle='rgba(40,150,40,0.7)';ctx.fill();});
+        ctx.restore();
+      }
+
+      // HUD bars
+      ctx.fillStyle='#1a1a1a';ctx.fillRect(10,472,200,16);
+      ctx.fillStyle=player.health>60?'#22cc55':player.health>30?'#ddaa00':'#cc2233';
+      ctx.fillRect(10,472,player.health*2,16);
+      ctx.strokeStyle='#333';ctx.lineWidth=1;ctx.strokeRect(10,472,200,16);
+
+      ctx.fillStyle='#1a1a1a';ctx.fillRect(590,472,200,16);
+      ctx.fillStyle=`rgba(30,${80+player.infection*1.7},60,0.95)`;
+      ctx.fillRect(590,472,player.infection*2,16);
+      ctx.strokeStyle='#333';ctx.strokeRect(590,472,200,16);
+
+      // HUD labels
+      ctx.fillStyle='rgba(150,150,150,0.6)';ctx.font='9px monospace';
+      ctx.fillText('HEALTH',14,470);
+      ctx.textAlign='right';ctx.fillText('INFECT',788,470);ctx.textAlign='left';
+
+      // Body map
+      drawBodyMap();
+
+      // ── Upgrade screen ─────────────────────────────────────────────────────
+      if(state==='upgrade'){
+        ctx.fillStyle='rgba(0,0,0,0.82)';ctx.fillRect(0,0,800,500);
+        ctx.textAlign='center';
+        ctx.font='bold 22px monospace';ctx.fillStyle='#88ff44';ctx.fillText('ZONE CLEARED — EVOLVE',400,80);
+        ctx.font='13px monospace';ctx.fillStyle='#555';ctx.fillText('Press 1, 2 or 3 to choose an upgrade',400,108);
+        upgradeOptions.forEach((u,i)=>{
+          const bx=80+i*220,by=150,bw=200,bh=120;
+          ctx.fillStyle='rgba(30,50,20,0.9)';ctx.fillRect(bx,by,bw,bh);
+          ctx.strokeStyle='rgba(80,200,80,0.6)';ctx.lineWidth=2;ctx.strokeRect(bx,by,bw,bh);
+          ctx.fillStyle='#88ff44';ctx.font='bold 13px monospace';ctx.fillText(`[${i+1}]`,bx+bw/2,by+28);
+          ctx.fillStyle='#ccffcc';ctx.font='bold 12px monospace';ctx.fillText(u.name,bx+bw/2,by+52);
+          ctx.fillStyle='#668866';ctx.font='11px monospace';
+          // word-wrap desc
+          const words=u.desc.split(' ');let line='';let ly=by+76;
+          words.forEach(w=>{const t=line?line+' '+w:w;if(ctx.measureText(t).width>bw-20){ctx.fillText(line,bx+bw/2,ly);line=w;ly+=16;}else line=t;});
+          if(line) ctx.fillText(line,bx+bw/2,ly);
+        });
+        ctx.textAlign='left';
+      }
+
+      // Dead / Win overlays
+      if(state==='dead'){
+        ctx.fillStyle='rgba(0,0,0,0.78)';ctx.fillRect(0,0,800,500);
+        ctx.textAlign='center';
+        ctx.font='bold 50px monospace';ctx.fillStyle='#ff2244';ctx.fillText('HOST REJECTED YOU',400,190);
+        ctx.font='18px monospace';ctx.fillStyle='#888';ctx.fillText('The immune system destroyed you.',400,240);
+        ctx.font='14px monospace';ctx.fillStyle='#555';ctx.fillText(`Time: ${(elapsedMs/1000).toFixed(1)}s`,400,275);
+        ctx.fillText('Press R to try again',400,310);
+        ctx.textAlign='left';
+      }
+      if(state==='spread'){
+        ctx.fillStyle='rgba(0,0,0,0.78)';ctx.fillRect(0,0,800,500);
+        ctx.textAlign='center';
+        ctx.font='bold 50px monospace';ctx.fillStyle='#44ff88';ctx.fillText('HOST FULLY INFECTED',400,160);
+        const t=elapsedMs/1000;
+        ctx.font='20px monospace';ctx.fillStyle='#aaffcc';ctx.fillText(`Time: ${t.toFixed(1)}s`,400,210);
+        if(bestTime&&t<=bestTime){ctx.fillStyle='#ffdd44';ctx.fillText(`BEST TIME: ${bestTime.toFixed(1)}s`,400,244);}
+        ctx.font='14px monospace';ctx.fillStyle='#555';ctx.fillText('Press R to infect again',400,290);
+        ctx.textAlign='left';
+      }
+    }
+
+    function loop(){update();draw();requestAnimationFrame(loop);}
+    loop();
+  </script>
+</body>
+</html>
