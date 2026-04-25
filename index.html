@@ -15,14 +15,13 @@
   <meta name="apple-mobile-web-app-title" content="PARASITE">
 
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { background: #000; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; font-family: monospace; color: #fff; }
-    #ui { width: 800px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-size: 13px; }
+    * { margin: 0; padding: 0; box-sizing: border-box; touch-action: none; user-select: none; -webkit-user-select: none; }
+    body { background: #000; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100dvh; font-family: monospace; color: #fff; overflow: hidden; }
+    #ui { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; font-size: 13px; max-width: 100%; width: min(800px, 100vw); padding: 0 4px; }
     #zone-name { font-size: 14px; letter-spacing: 3px; color: #aaa; }
-    #message { margin-top: 8px; font-size: 12px; color: #333; }
-    /* Fit the game to smaller screens (e.g. iPhone) without breaking layout */
-    #game { max-width: 100%; height: auto; display: block; }
-    #ui { max-width: 100%; width: min(800px, 100vw); }
+    #message { margin-top: 6px; font-size: 11px; color: #333; text-align: center; }
+    #game { max-width: 100%; height: auto; display: block; touch-action: none; }
+    @media (max-height: 520px) { #message { display: none; } }
   </style>
 </head>
 <body>
@@ -32,7 +31,7 @@
     <span>🪙 <span id="tokval">500</span> &nbsp;·&nbsp; ⏱ <span id="tval">0.0s</span> &nbsp;·&nbsp; <span style="color:#555;cursor:pointer" onclick="toggleShop()">[S] SHOP</span></span>
   </div>
   <canvas id="game" width="800" height="500"></canvas>
-  <div id="message">Arrow keys / WASD · Eat yellow nutrients · Avoid red cells · Enter tubes to travel</div>
+  <div id="message">Touch &amp; drag to move · Eat yellow nutrients · Avoid red cells · Enter tubes to travel</div>
 
   <script>
     const canvas = document.getElementById('game');
@@ -380,6 +379,82 @@
       if((e.key==='r'||e.key==='R')&&(state==='dead'||state==='spread')) reset();
     });
 
+    // ── Touch / Virtual Joystick ───────────────────────────────────────────────
+    let joystick = null;
+
+    function getCanvasPos(touch) {
+      const rect = canvas.getBoundingClientRect();
+      return {
+        x: (touch.clientX - rect.left) * (800 / rect.width),
+        y: (touch.clientY - rect.top)  * (500 / rect.height)
+      };
+    }
+
+    canvas.addEventListener('touchstart', e => {
+      e.preventDefault();
+      const touch = e.changedTouches[0];
+      const pos = getCanvasPos(touch);
+
+      if (state === 'dead' || state === 'spread') { reset(); return; }
+
+      if (state === 'upgrade') {
+        upgradeOptions.forEach((u, i) => {
+          const bx=80+i*220, by=150, bw=200, bh=120;
+          if (pos.x>=bx && pos.x<=bx+bw && pos.y>=by && pos.y<=by+bh) {
+            u.apply(); state='playing';
+          }
+        });
+        return;
+      }
+
+      if (state === 'shop') {
+        if (pos.y < 90) { state='playing'; return; }
+        SKINS.forEach((sk, i) => {
+          const col=i%4, row=Math.floor(i/4);
+          const bw=168, bh=130, gap=12;
+          const startX=(800-(4*(bw+gap)-gap))/2;
+          const bx=startX+col*(bw+gap), by=100+row*(bh+gap);
+          if (pos.x>=bx && pos.x<=bx+bw && pos.y>=by && pos.y<=by+bh) {
+            shopCursor=i;
+            if (ownedSkins.includes(sk.id)) { equippedSkin=sk.id; saveShop(); }
+            else if (tokens>=sk.cost) { tokens-=sk.cost; ownedSkins.push(sk.id); equippedSkin=sk.id; saveShop(); }
+          }
+        });
+        return;
+      }
+
+      if (!joystick) {
+        joystick = { id: touch.identifier, bx: touch.clientX, by: touch.clientY, cx: touch.clientX, cy: touch.clientY };
+      }
+    }, { passive: false });
+
+    canvas.addEventListener('touchmove', e => {
+      e.preventDefault();
+      for (const touch of e.changedTouches) {
+        if (joystick && touch.identifier === joystick.id) {
+          joystick.cx = touch.clientX;
+          joystick.cy = touch.clientY;
+          const dx = touch.clientX - joystick.bx;
+          const dy = touch.clientY - joystick.by;
+          const dead = 12;
+          keys['ArrowLeft']  = dx < -dead;
+          keys['ArrowRight'] = dx >  dead;
+          keys['ArrowUp']    = dy < -dead;
+          keys['ArrowDown']  = dy >  dead;
+        }
+      }
+    }, { passive: false });
+
+    canvas.addEventListener('touchend', e => {
+      e.preventDefault();
+      for (const touch of e.changedTouches) {
+        if (joystick && touch.identifier === joystick.id) {
+          joystick = null;
+          keys['ArrowLeft']=keys['ArrowRight']=keys['ArrowUp']=keys['ArrowDown']=false;
+        }
+      }
+    }, { passive: false });
+
     // ── Update ─────────────────────────────────────────────────────────────────
     function update(){
       if(state==='upgrade'||state==='shop'||state==='dead'||state==='spread') return;
@@ -564,6 +639,24 @@
       // Body map
       drawBodyMap();
 
+      // Virtual joystick
+      if (joystick && state==='playing') {
+        const rect=canvas.getBoundingClientRect();
+        const sx=800/rect.width, sy=500/rect.height;
+        const jx=(joystick.bx-rect.left)*sx, jy=(joystick.by-rect.top)*sy;
+        const kxRaw=(joystick.cx-rect.left)*sx, kyRaw=(joystick.cy-rect.top)*sy;
+        const ddx=kxRaw-jx, ddy=kyRaw-jy, dd=Math.sqrt(ddx*ddx+ddy*ddy)||1;
+        const maxR=40;
+        const kx=jx+(dd>maxR?(ddx/dd)*maxR:ddx);
+        const ky=jy+(dd>maxR?(ddy/dd)*maxR:ddy);
+        ctx.beginPath();ctx.arc(jx,jy,maxR,0,Math.PI*2);
+        ctx.fillStyle='rgba(255,255,255,0.07)';ctx.fill();
+        ctx.strokeStyle='rgba(255,255,255,0.18)';ctx.lineWidth=2;ctx.stroke();
+        ctx.beginPath();ctx.arc(kx,ky,18,0,Math.PI*2);
+        ctx.fillStyle='rgba(255,255,255,0.22)';ctx.fill();
+        ctx.strokeStyle='rgba(255,255,255,0.38)';ctx.lineWidth=2;ctx.stroke();
+      }
+
       // ── Upgrade screen ─────────────────────────────────────────────────────
       if(state==='upgrade'){
         ctx.fillStyle='rgba(0,0,0,0.82)';ctx.fillRect(0,0,800,500);
@@ -591,7 +684,7 @@
         ctx.fillStyle='rgba(0,0,0,0.88)';ctx.fillRect(0,0,800,500);
         ctx.textAlign='center';
         ctx.font='bold 22px monospace';ctx.fillStyle='#ffcc44';ctx.fillText('PARASITE SHOP',400,36);
-        ctx.font='12px monospace';ctx.fillStyle='#555';ctx.fillText('← → navigate · ENTER buy/equip · S or ESC close',400,58);
+        ctx.font='12px monospace';ctx.fillStyle='#555';ctx.fillText('Tap card to buy/equip · tap top area to close',400,58);
         ctx.font='11px monospace';ctx.fillStyle='#888';ctx.fillText(`🪙 ${tokens} tokens`,400,78);
 
         // 4 per row
@@ -643,7 +736,7 @@
         ctx.font='17px monospace';ctx.fillStyle='#888';ctx.fillText('The immune system destroyed you.',400,215);
         ctx.font='14px monospace';ctx.fillStyle='#555';ctx.fillText(`Time: ${(elapsedMs/1000).toFixed(1)}s`,400,248);
         if(tokensEarnedThisRun>0){ctx.fillStyle='#ffcc44';ctx.font='14px monospace';ctx.fillText(`+${tokensEarnedThisRun} 🪙 tokens saved · total: ${tokens}`,400,275);}
-        ctx.fillStyle='#444';ctx.fillText('Press R to try again',400,310);
+        ctx.fillStyle='#444';ctx.fillText('Tap screen · or press R to try again',400,310);
         ctx.textAlign='left';
       }
       if(state==='spread'){
@@ -655,7 +748,7 @@
         if(bestTime&&t<=bestTime){ctx.fillStyle='#ffdd44';ctx.font='15px monospace';ctx.fillText(`NEW BEST: ${bestTime.toFixed(1)}s`,400,212);}
         ctx.fillStyle='#ffcc44';ctx.font='15px monospace';ctx.fillText(`+${tokensEarnedThisRun} 🪙 tokens earned this run`,400,242);
         ctx.fillStyle='#aaffcc';ctx.font='13px monospace';ctx.fillText(`Bank: ${tokens} tokens total · Press S to spend them`,400,268);
-        ctx.fillStyle='#444';ctx.font='13px monospace';ctx.fillText('Press R to infect again',400,300);
+        ctx.fillStyle='#444';ctx.font='13px monospace';ctx.fillText('Tap screen · or press R to infect again',400,300);
         ctx.textAlign='left';
       }
     }
