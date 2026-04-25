@@ -24,13 +24,13 @@
     #game { max-width: 100%; height: auto; display: block; touch-action: none; }
     @media (max-height: 520px) { #message { display: none; } }
     #controls { display: none; align-items: center; justify-content: space-between; width: 100%; box-sizing: border-box; }
-    /* ── Mobile: canvas fills full screen, UI + controls float as fixed overlays ── */
+    /* ── Mobile: canvas scaled to fit, controls overlay bottom ── */
     @media (hover: none) and (pointer: coarse) {
       body { justify-content: flex-start; align-items: flex-start; }
-      #ui { position: fixed; top: 0; left: 0; right: 0; z-index: 20; width: 100%; max-width: 100%; background: rgba(0,0,0,0.82); padding: 4px 8px; font-size: 11px; margin-bottom: 0; }
-      #game-wrap { position: fixed; top: 0; left: 0; width: 100vw; height: 100dvh; max-width: none; z-index: 1; }
-      #game { width: 100vw; height: 100dvh; max-width: none; display: block; }
-      #controls { display: flex; position: fixed; bottom: 0; left: 0; right: 0; z-index: 20; height: 130px; background: rgba(0,0,0,0.65); padding: 10px 24px; padding-bottom: max(10px, env(safe-area-inset-bottom)); box-sizing: border-box; }
+      #ui { position: fixed; top: 0; left: 0; right: 0; z-index: 30; width: 100%; max-width: 100%; background: rgba(0,0,0,0.88); padding: 3px 8px; font-size: 11px; margin-bottom: 0; box-sizing: border-box; }
+      #game-wrap { position: fixed; top: 28px; left: 0; right: 0; bottom: 0; z-index: 1; display: flex; align-items: center; justify-content: center; background: #000; }
+      #game { display: block; touch-action: none; }
+      #controls { display: flex; position: fixed; bottom: 0; left: 0; right: 0; z-index: 20; height: 120px; background: rgba(0,0,0,0.72); padding: 8px 24px; padding-bottom: max(8px, env(safe-area-inset-bottom)); box-sizing: border-box; }
       #message { display: none; }
     }
     @media (hover: none) and (pointer: coarse) and (orientation: portrait) {
@@ -1003,6 +1003,20 @@
         ctx.textAlign='left';
       }
     }
+
+    // ── Mobile canvas sizing ───────────────────────────────────────────────────
+    function mobileResize() {
+      if (!window.matchMedia('(hover: none) and (pointer: coarse)').matches) return;
+      const uiH = 28;
+      const availW = window.innerWidth;
+      const availH = window.innerHeight - uiH;
+      const scale = Math.min(availW / 800, availH / 500);
+      canvas.style.width  = Math.round(800 * scale) + 'px';
+      canvas.style.height = Math.round(500 * scale) + 'px';
+    }
+    window.addEventListener('resize', mobileResize);
+    window.addEventListener('orientationchange', () => setTimeout(mobileResize, 150));
+    mobileResize();
 
     function loop(){update();draw();requestAnimationFrame(loop);}
     loop();
