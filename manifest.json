@@ -2,7 +2,7 @@
   "name": "PARASITE",
   "short_name": "PARASITE",
   "description": "Navigate the bloodstream as a parasite — eat nutrients, avoid white blood cells, spread through the body.",
-  "start_url": "./parasite.html",
+  "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
   "orientation": "landscape",

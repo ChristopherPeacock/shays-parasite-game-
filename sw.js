@@ -1,6 +1,6 @@
 const CACHE_NAME = 'parasite-v1';
 const ASSETS = [
-  './parasite.html',
+  './index.html',
   './manifest.json',
   './icon-192.png',
   './icon-512.png'
