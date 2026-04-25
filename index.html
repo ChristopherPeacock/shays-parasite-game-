@@ -20,6 +20,8 @@
     #ui { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; font-size: 13px; max-width: 100%; width: min(800px, 100vw); padding: 0 4px; }
     #zone-name { font-size: 14px; letter-spacing: 3px; color: #aaa; }
     #message { margin-top: 6px; font-size: 11px; color: #333; text-align: center; }
+    #shop-btn { background: rgba(30,20,5,0.85); border: 1px solid #555; color: #aaa; font-family: monospace; font-size: 12px; letter-spacing: 2px; cursor: pointer; padding: 3px 12px; transition: border-color 0.15s, color 0.15s; }
+    #shop-btn:hover { border-color: #ffcc44; color: #ffcc44; }
     #game { max-width: 100%; height: auto; display: block; touch-action: none; }
     @media (max-height: 520px) { #message { display: none; } }
   </style>
@@ -28,7 +30,7 @@
   <div id="ui">
     <span>❤ HEALTH: <span id="hval">100</span></span>
     <span id="zone-name">BLOODSTREAM</span>
-    <span>🪙 <span id="tokval">500</span> &nbsp;·&nbsp; ⏱ <span id="tval">0.0s</span> &nbsp;·&nbsp; <span style="color:#555;cursor:pointer" onclick="toggleShop()">[S] SHOP</span></span>
+    <span>🪙 <span id="tokval">500</span> &nbsp;·&nbsp; ⏱ <span id="tval">0.0s</span> &nbsp;·&nbsp; <button id="shop-btn" onclick="toggleShop()">SHOP</button></span>
   </div>
   <canvas id="game" width="800" height="500"></canvas>
   <div id="message">Touch &amp; drag to move · Eat yellow nutrients · Avoid red cells · Enter tubes to travel</div>
@@ -64,8 +66,8 @@
     }
 
     function toggleShop(){
-      if(state==='playing') state='shop';
-      else if(state==='shop') state='playing';
+      if(state==='playing'){ state='shop'; document.getElementById('shop-btn').textContent='CLOSE'; }
+      else if(state==='shop'){ state='playing'; document.getElementById('shop-btn').textContent='SHOP'; }
     }
 
     // ── Skin draw functions (called with ctx already translated+rotated) ────────
@@ -261,11 +263,11 @@
 
     // ── Zones ──────────────────────────────────────────────────────────────────
     const ZONES = [
-      { name: 'BLOODSTREAM', bg: '#0f0408', wbcSpeed: 1.0, wbcMax: 10 },
-      { name: 'LUNGS',       bg: '#060d18', wbcSpeed: 0.8, wbcMax: 7  },
-      { name: 'BRAIN',       bg: '#0d0b14', wbcSpeed: 1.5, wbcMax: 14 },
-      { name: 'HEART',       bg: '#100404', wbcSpeed: 1.8, wbcMax: 16 },
-      { name: 'STOMACH',     bg: '#080f06', wbcSpeed: 0.6, wbcMax: 6  },
+      { name: 'BLOODSTREAM', bg: '#0f0408', wbcSpeed: 0.7, wbcMax: 10 },
+      { name: 'LUNGS',       bg: '#060d18', wbcSpeed: 0.55,wbcMax: 7  },
+      { name: 'BRAIN',       bg: '#0d0b14', wbcSpeed: 1.0, wbcMax: 14 },
+      { name: 'HEART',       bg: '#100404', wbcSpeed: 1.2, wbcMax: 16 },
+      { name: 'STOMACH',     bg: '#080f06', wbcSpeed: 0.4, wbcMax: 6  },
     ];
     let zonePools = [20,20,20,20,20];
     let zoneIndex = 0;
@@ -328,6 +330,27 @@
     document.addEventListener('keydown', e=>{keys[e.key]=true;});
     document.addEventListener('keyup',   e=>{keys[e.key]=false;});
 
+    // ── Mouse follow ───────────────────────────────────────────────────────────
+    let mouse = { cx: 400, cy: 250, active: false };
+    canvas.addEventListener('mousemove', e => {
+      const rect = canvas.getBoundingClientRect();
+      mouse.cx = (e.clientX - rect.left) * (800 / rect.width);
+      mouse.cy = (e.clientY - rect.top)  * (500 / rect.height);
+      mouse.active = true;
+    });
+    canvas.addEventListener('mouseleave', () => { mouse.active = false; });
+
+    // ── Sprint ─────────────────────────────────────────────────────────────────
+    let sprintMeter = 100;
+    let isSprinting = false;
+    let stillTicks = 0;
+    const BASE_SPEED = 3.2;
+    const SPRINT_MULT = 1.7;
+    const SPRINT_DRAIN = 0.38;   // per tick while sprinting
+    const SPRINT_REGEN = 1.4;    // per tick while still after 3s
+    const STILL_DELAY = 180;     // ticks before regen kicks in (3s at 60fps)
+    const SPRINT_BTN = { x:720, y:430, r:28 }; // mobile sprint button position
+
     // ── Nutrients ──────────────────────────────────────────────────────────────
     let nutrients = [];
     function spawnNutrient(){
@@ -350,6 +373,19 @@
     function refillWBCs(){wbcs=[];for(let i=0;i<4;i++)spawnWBC();}
     refillWBCs();
 
+    // ── Elite WBCs (2, always present, high damage) ────────────────────────────
+    let eliteWBCs = [];
+    function spawnEliteWBC(){
+      const side=Math.floor(Math.random()*4);let x,y;
+      if(side===0){x=Math.random()*800;y=-30;}
+      else if(side===1){x=830;y=Math.random()*500;}
+      else if(side===2){x=Math.random()*800;y=530;}
+      else{x=-30;y=Math.random()*500;}
+      eliteWBCs.push({x,y,r:20,speed:(1.1+Math.random()*0.4)*zone.wbcSpeed*wbcSlowFactor,wobble:Math.random()*Math.PI*2});
+    }
+    function refillEliteWBCs(){eliteWBCs=[];spawnEliteWBC();spawnEliteWBC();}
+    refillEliteWBCs();
+
     let wbcTimer=0;
     function dist(a,b){return Math.sqrt((a.x-b.x)**2+(a.y-b.y)**2);}
 
@@ -357,7 +393,7 @@
     function enterZone(index){
       zoneIndex=index;zone=ZONES[zoneIndex];
       portals=makePortals();buildBG();
-      refillNutrients();refillWBCs();wbcTimer=0;
+      refillNutrients();refillWBCs();refillEliteWBCs();wbcTimer=0;
       player.x=400;player.y=250;player.inv=60;
       flashTimer=25;
       const cl=zonePools[zoneIndex]===0?' ✓':'';
@@ -368,8 +404,9 @@
       zoneIndex=0;zone=ZONES[0];
       zonePools=[20,20,20,20,20];
       infectionPerNutrient=1;wbcSlowFactor=1;playerArmor=false;playerRegen=false;
-      player.x=400;player.y=250;player.health=100;player.infection=0;player.inv=0;player.angle=0;player.speed=3.2;
-      portals=makePortals();buildBG();refillNutrients();refillWBCs();wbcTimer=0;
+      sprintMeter=100;isSprinting=false;stillTicks=0;
+      player.x=400;player.y=250;player.health=100;player.infection=0;player.inv=0;player.angle=0;player.speed=BASE_SPEED;
+      portals=makePortals();buildBG();refillNutrients();refillWBCs();refillEliteWBCs();wbcTimer=0;
       startTime=Date.now();elapsedMs=0;tokensEarnedThisRun=0;state='playing';
       document.getElementById('zone-name').textContent=zone.name;
       document.getElementById('tokval').textContent=tokens;
@@ -377,6 +414,7 @@
 
     document.addEventListener('keydown',e=>{
       if((e.key==='r'||e.key==='R')&&(state==='dead'||state==='spread')) reset();
+      if(e.key==='Shift') isSprinting=!isSprinting;
     });
 
     // ── Touch / Virtual Joystick ───────────────────────────────────────────────
@@ -389,6 +427,23 @@
         y: (touch.clientY - rect.top)  * (500 / rect.height)
       };
     }
+
+    canvas.addEventListener('click', e => {
+      if(state !== 'shop') return;
+      const pos = getCanvasPos(e);
+      if(pos.x>=316 && pos.x<=484 && pos.y>=68 && pos.y<=98){ toggleShop(); return; }
+      SKINS.forEach((sk,i)=>{
+        const col=i%4, row=Math.floor(i/4);
+        const bw=168,bh=130,gap=12;
+        const startX=(800-(4*(bw+gap)-gap))/2;
+        const bx=startX+col*(bw+gap), by=106+row*(bh+gap);
+        if(pos.x>=bx&&pos.x<=bx+bw&&pos.y>=by&&pos.y<=by+bh){
+          shopCursor=i;
+          if(ownedSkins.includes(sk.id)){equippedSkin=sk.id;saveShop();}
+          else if(tokens>=sk.cost){tokens-=sk.cost;ownedSkins.push(sk.id);equippedSkin=sk.id;saveShop();}
+        }
+      });
+    });
 
     canvas.addEventListener('touchstart', e => {
       e.preventDefault();
@@ -408,12 +463,12 @@
       }
 
       if (state === 'shop') {
-        if (pos.y < 90) { state='playing'; return; }
+        if (pos.x>=316 && pos.x<=484 && pos.y>=68 && pos.y<=98) { toggleShop(); return; }
         SKINS.forEach((sk, i) => {
           const col=i%4, row=Math.floor(i/4);
           const bw=168, bh=130, gap=12;
           const startX=(800-(4*(bw+gap)-gap))/2;
-          const bx=startX+col*(bw+gap), by=100+row*(bh+gap);
+          const bx=startX+col*(bw+gap), by=106+row*(bh+gap);
           if (pos.x>=bx && pos.x<=bx+bw && pos.y>=by && pos.y<=by+bh) {
             shopCursor=i;
             if (ownedSkins.includes(sk.id)) { equippedSkin=sk.id; saveShop(); }
@@ -422,6 +477,10 @@
         });
         return;
       }
+
+      // Sprint button tap
+      const sdx=pos.x-SPRINT_BTN.x, sdy=pos.y-SPRINT_BTN.y;
+      if(sdx*sdx+sdy*sdy<=SPRINT_BTN.r*SPRINT_BTN.r){ isSprinting=!isSprinting; return; }
 
       if (!joystick) {
         joystick = { id: touch.identifier, bx: touch.clientX, by: touch.clientY, cx: touch.clientX, cy: touch.clientY };
@@ -462,14 +521,39 @@
       if(flashTimer>0) flashTimer--;
       elapsedMs=Date.now()-startTime;
 
-      // Movement
-      const ml=(keys['ArrowLeft'] ||keys['a']||keys['A'])?1:0;
-      const mr=(keys['ArrowRight']||keys['d']||keys['D'])?1:0;
-      const mu=(keys['ArrowUp']   ||keys['w']||keys['W'])?1:0;
-      const md=(keys['ArrowDown'] ||keys['s']||keys['S'])?1:0;
-      const mvx=mr-ml,mvy=md-mu;
-      if(mvx!==0||mvy!==0) player.angle=Math.atan2(mvy,mvx);
-      player.x+=mvx*player.speed;player.y+=mvy*player.speed;
+      // Movement — mouse follow on PC, WASD fallback
+      let mvx = 0, mvy = 0;
+      const dxM = mouse.cx - player.x, dyM = mouse.cy - player.y;
+      const distM = Math.sqrt(dxM*dxM + dyM*dyM);
+      if (mouse.active && distM > 8) {
+        mvx = dxM / distM; mvy = dyM / distM;
+      } else if (!mouse.active) {
+        const ml=(keys['ArrowLeft'] ||keys['a']||keys['A'])?1:0;
+        const mr=(keys['ArrowRight']||keys['d']||keys['D'])?1:0;
+        const mu=(keys['ArrowUp']   ||keys['w']||keys['W'])?1:0;
+        const md=(keys['ArrowDown'] ||keys['s']||keys['S'])?1:0;
+        mvx=mr-ml; mvy=md-mu;
+        const mlen=Math.sqrt(mvx*mvx+mvy*mvy)||1;
+        if(mvx||mvy){mvx/=mlen;mvy/=mlen;}
+      }
+      const moving = mvx!==0||mvy!==0;
+      if(moving) player.angle=Math.atan2(mvy,mvx);
+
+      // Sprint logic
+      if(isSprinting && sprintMeter<=0) isSprinting=false;
+      const sprintActive = isSprinting && sprintMeter>0;
+      const curSpeed = sprintActive ? BASE_SPEED*SPRINT_MULT : BASE_SPEED;
+      player.speed = curSpeed;
+      if(sprintActive) sprintMeter=Math.max(0,sprintMeter-SPRINT_DRAIN);
+
+      // Still timer — regen after 3s of no movement
+      if(moving) { stillTicks=0; }
+      else { stillTicks++; }
+      if(stillTicks>=STILL_DELAY && !sprintActive) sprintMeter=Math.min(100,sprintMeter+SPRINT_REGEN);
+
+      // Clamp step to not overshoot the mouse cursor
+      const step = (mouse.active && distM < curSpeed) ? distM : curSpeed;
+      player.x+=mvx*step;player.y+=mvy*step;
       player.x=Math.max(player.r,Math.min(800-player.r,player.x));
       player.y=Math.max(player.r,Math.min(500-player.r,player.y));
 
@@ -521,6 +605,19 @@
           if(player.health<=0){player.health=0;state='dead';}
         }
       });
+      // Elite WBCs
+      eliteWBCs.forEach(w=>{
+        w.wobble+=0.05;
+        const dx=player.x-w.x,dy=player.y-w.y,d=Math.sqrt(dx*dx+dy*dy)||1;
+        w.x+=(dx/d)*w.speed+Math.sin(w.wobble)*0.3;
+        w.y+=(dy/d)*w.speed+Math.cos(w.wobble)*0.3;
+        if(player.inv<=0&&dist(player,w)<player.r+w.r-4){
+          const dmg=playerArmor?7.5:15;
+          player.health-=dmg;player.inv=55;
+          if(player.health<=0){player.health=0;state='dead';}
+        }
+      });
+
       if(player.inv>0) player.inv--;
       if(player.infection>=100){
         const t=elapsedMs/1000;
@@ -612,6 +709,22 @@
         ctx.beginPath();ctx.arc(w.x+3,w.y+3,w.r*0.25,0,Math.PI*2);ctx.fillStyle='#ff6688';ctx.fill();
       });
 
+      // Elite WBCs — white/silver neutrophil look
+      eliteWBCs.forEach(w=>{
+        ctx.shadowColor='rgba(200,220,255,0.9)';ctx.shadowBlur=18;
+        ctx.beginPath();ctx.arc(w.x,w.y,w.r,0,Math.PI*2);ctx.fillStyle='rgba(210,220,245,0.95)';ctx.fill();
+        ctx.strokeStyle='rgba(255,255,255,0.9)';ctx.lineWidth=2.5;ctx.stroke();
+        ctx.shadowBlur=0;
+        // Multi-lobe nucleus (neutrophil characteristic)
+        [[-5,-3],[1,5],[6,-3]].forEach(([ox,oy])=>{
+          ctx.beginPath();ctx.ellipse(w.x+ox,w.y+oy,4.5,3.5,0,0,Math.PI*2);ctx.fillStyle='rgba(70,90,190,0.75)';ctx.fill();
+        });
+        // Granules
+        [[-8,3],[7,-5],[2,8],[-5,-7],[8,6]].forEach(([ox,oy])=>{
+          ctx.beginPath();ctx.arc(w.x+ox,w.y+oy,1.8,0,Math.PI*2);ctx.fillStyle='rgba(150,130,210,0.65)';ctx.fill();
+        });
+      });
+
       // Player — active skin
       if(player.inv<=0||tick%8<4){
         ctx.save();ctx.translate(player.x,player.y);ctx.rotate(player.angle);
@@ -631,10 +744,39 @@
       ctx.fillRect(590,472,player.infection*2,16);
       ctx.strokeStyle='#333';ctx.strokeRect(590,472,200,16);
 
+      // Sprint bar (center bottom)
+      const sbx=300,sby=472,sbw=200,sbh=16;
+      ctx.fillStyle='#1a1a1a';ctx.fillRect(sbx,sby,sbw,sbh);
+      const sprintCol=isSprinting?'rgba(255,200,40,0.95)':'rgba(80,160,255,0.85)';
+      ctx.fillStyle=sprintCol;ctx.fillRect(sbx,sby,sprintMeter*2,sbh);
+      ctx.strokeStyle='#333';ctx.lineWidth=1;ctx.strokeRect(sbx,sby,sbw,sbh);
+      // flash "STAND STILL" hint when empty and not yet regenerating
+      ctx.fillStyle='rgba(150,150,150,0.6)';ctx.font='9px monospace';ctx.textAlign='center';
+      if(sprintMeter<5&&stillTicks<STILL_DELAY){
+        ctx.fillStyle=`rgba(255,180,40,${0.5+Math.sin(tick*0.2)*0.5})`;
+        ctx.fillText('STAND STILL TO RECHARGE',sbx+sbw/2,sby-2);
+      } else {
+        ctx.fillStyle='rgba(150,150,150,0.6)';
+        ctx.fillText(isSprinting?'SPRINT ON':'SPRINT',sbx+sbw/2,sby-2);
+      }
+      ctx.textAlign='left';
+
       // HUD labels
       ctx.fillStyle='rgba(150,150,150,0.6)';ctx.font='9px monospace';
       ctx.fillText('HEALTH',14,470);
       ctx.textAlign='right';ctx.fillText('INFECT',788,470);ctx.textAlign='left';
+
+      // Sprint button (mobile, bottom-right)
+      if(state==='playing'){
+        const {x:bx,y:by,r:br}=SPRINT_BTN;
+        ctx.beginPath();ctx.arc(bx,by,br,0,Math.PI*2);
+        ctx.fillStyle=isSprinting?'rgba(255,200,40,0.35)':'rgba(80,160,255,0.15)';ctx.fill();
+        ctx.strokeStyle=isSprinting?'rgba(255,200,40,0.8)':'rgba(80,160,255,0.4)';ctx.lineWidth=2;ctx.stroke();
+        ctx.fillStyle=isSprinting?'rgba(255,220,80,1)':'rgba(120,180,255,0.7)';
+        ctx.font='bold 11px monospace';ctx.textAlign='center';ctx.textBaseline='middle';
+        ctx.fillText(isSprinting?'⚡ON':'⚡',bx,by);
+        ctx.textBaseline='alphabetic';ctx.textAlign='left';
+      }
 
       // Body map
       drawBodyMap();
@@ -684,15 +826,19 @@
         ctx.fillStyle='rgba(0,0,0,0.88)';ctx.fillRect(0,0,800,500);
         ctx.textAlign='center';
         ctx.font='bold 22px monospace';ctx.fillStyle='#ffcc44';ctx.fillText('PARASITE SHOP',400,36);
-        ctx.font='12px monospace';ctx.fillStyle='#555';ctx.fillText('Tap card to buy/equip · tap top area to close',400,58);
-        ctx.font='11px monospace';ctx.fillStyle='#888';ctx.fillText(`🪙 ${tokens} tokens`,400,78);
+        ctx.font='11px monospace';ctx.fillStyle='#888';ctx.fillText(`🪙 ${tokens} tokens`,400,58);
+        // Close button
+        ctx.fillStyle='rgba(50,30,5,0.9)';ctx.fillRect(316,68,168,30);
+        ctx.strokeStyle='rgba(255,180,40,0.7)';ctx.lineWidth=2;ctx.strokeRect(316,68,168,30);
+        ctx.fillStyle='#ffcc44';ctx.font='bold 13px monospace';ctx.fillText('✕  CLOSE SHOP',400,88);
+        ctx.textAlign='left';
 
         // 4 per row
         SKINS.forEach((sk,i)=>{
           const col=i%4, row=Math.floor(i/4);
           const bw=168,bh=130,gap=12;
           const totalW=4*(bw+gap)-gap, startX=(800-totalW)/2;
-          const bx=startX+col*(bw+gap), by=100+row*(bh+gap);
+          const bx=startX+col*(bw+gap), by=106+row*(bh+gap);
           const owned=ownedSkins.includes(sk.id);
           const equipped=equippedSkin===sk.id;
           const selected=shopCursor===i;
