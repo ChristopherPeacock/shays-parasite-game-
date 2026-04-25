@@ -24,6 +24,13 @@
     #shop-btn:hover { border-color: #ffcc44; color: #ffcc44; }
     #game { max-width: 100%; height: auto; display: block; touch-action: none; }
     @media (max-height: 520px) { #message { display: none; } }
+    #controls { display: none; width: min(800px, 100vw); align-items: center; justify-content: space-between; padding: 10px 24px; margin-top: 2px; }
+    @media (hover: none) and (pointer: coarse) { #controls { display: flex; } }
+    #joystick-zone { width: 120px; height: 100px; display: flex; align-items: center; justify-content: center; touch-action: none; }
+    #joystick-ring { width: 88px; height: 88px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.18); background: rgba(255,255,255,0.05); position: relative; display: flex; align-items: center; justify-content: center; }
+    #joystick-thumb { width: 40px; height: 40px; border-radius: 50%; background: rgba(255,255,255,0.22); border: 2px solid rgba(255,255,255,0.4); position: absolute; pointer-events: none; }
+    #sprint-dom { width: 76px; height: 76px; border-radius: 50%; background: rgba(80,160,255,0.12); border: 2px solid rgba(80,160,255,0.35); color: rgba(120,180,255,0.75); font-size: 22px; cursor: pointer; font-family: monospace; touch-action: none; transition: background 0.1s, border-color 0.1s; }
+    #sprint-dom.on { background: rgba(255,200,40,0.32); border-color: rgba(255,200,40,0.8); color: rgba(255,220,80,1); }
   </style>
 </head>
 <body>
@@ -33,6 +40,11 @@
     <span>🪙 <span id="tokval">500</span> &nbsp;·&nbsp; ⏱ <span id="tval">0.0s</span> &nbsp;·&nbsp; <button id="shop-btn" onclick="toggleShop()">SHOP</button></span>
   </div>
   <canvas id="game" width="800" height="500"></canvas>
+  <div id="controls">
+    <div id="joystick-zone"><div id="joystick-ring"><div id="joystick-thumb"></div></div></div>
+    <div style="font-size:9px;color:#333;letter-spacing:2px;text-align:center">DRAG<br>TO MOVE</div>
+    <button id="sprint-dom">⚡</button>
+  </div>
   <div id="message">Touch &amp; drag to move · Eat yellow nutrients · Avoid red cells · Enter tubes to travel</div>
 
   <script>
@@ -404,7 +416,7 @@
       zoneIndex=0;zone=ZONES[0];
       zonePools=[20,20,20,20,20];
       infectionPerNutrient=1;wbcSlowFactor=1;playerArmor=false;playerRegen=false;
-      sprintMeter=100;isSprinting=false;stillTicks=0;
+      sprintMeter=100;isSprinting=false;setSprintDom(false);stillTicks=0;
       player.x=400;player.y=250;player.health=100;player.infection=0;player.inv=0;player.angle=0;player.speed=BASE_SPEED;
       portals=makePortals();buildBG();refillNutrients();refillWBCs();refillEliteWBCs();wbcTimer=0;
       startTime=Date.now();elapsedMs=0;tokensEarnedThisRun=0;state='playing';
@@ -414,12 +426,10 @@
 
     document.addEventListener('keydown',e=>{
       if((e.key==='r'||e.key==='R')&&(state==='dead'||state==='spread')) reset();
-      if(e.key==='Shift') isSprinting=!isSprinting;
+      if(e.key==='Shift'){ isSprinting=!isSprinting; setSprintDom(isSprinting); }
     });
 
-    // ── Touch / Virtual Joystick ───────────────────────────────────────────────
-    let joystick = null;
-
+    // ── Touch helpers ──────────────────────────────────────────────────────────
     function getCanvasPos(touch) {
       const rect = canvas.getBoundingClientRect();
       return {
@@ -478,40 +488,56 @@
         return;
       }
 
-      // Sprint button tap
-      const sdx=pos.x-SPRINT_BTN.x, sdy=pos.y-SPRINT_BTN.y;
-      if(sdx*sdx+sdy*sdy<=SPRINT_BTN.r*SPRINT_BTN.r){ isSprinting=!isSprinting; return; }
+    }, { passive: false });
 
-      if (!joystick) {
-        joystick = { id: touch.identifier, bx: touch.clientX, by: touch.clientY, cx: touch.clientX, cy: touch.clientY };
+    // ── DOM joystick (outside canvas) ─────────────────────────────────────────
+    const joyZone  = document.getElementById('joystick-zone');
+    const joyRing  = document.getElementById('joystick-ring');
+    const joyThumb = document.getElementById('joystick-thumb');
+    const sprintDom = document.getElementById('sprint-dom');
+    let joyTouchId = null;
+    const JOY_R = 38;
+
+    function setSprintDom(on) { sprintDom.classList.toggle('on', on); }
+
+    joyZone.addEventListener('touchstart', e => {
+      e.preventDefault();
+      if (joyTouchId !== null) return;
+      joyTouchId = e.changedTouches[0].identifier;
+    }, { passive: false });
+
+    joyZone.addEventListener('touchmove', e => {
+      e.preventDefault();
+      for (const t of e.changedTouches) {
+        if (t.identifier !== joyTouchId) continue;
+        const rect = joyRing.getBoundingClientRect();
+        const cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
+        const dx = t.clientX - cx, dy = t.clientY - cy;
+        const d = Math.sqrt(dx*dx + dy*dy) || 1;
+        const clamped = Math.min(d, JOY_R);
+        joyThumb.style.transform = `translate(${dx/d*clamped}px,${dy/d*clamped}px)`;
+        const dead = 10;
+        keys['ArrowLeft']  = dx < -dead;
+        keys['ArrowRight'] = dx >  dead;
+        keys['ArrowUp']    = dy < -dead;
+        keys['ArrowDown']  = dy >  dead;
       }
     }, { passive: false });
 
-    canvas.addEventListener('touchmove', e => {
+    joyZone.addEventListener('touchend', e => {
       e.preventDefault();
-      for (const touch of e.changedTouches) {
-        if (joystick && touch.identifier === joystick.id) {
-          joystick.cx = touch.clientX;
-          joystick.cy = touch.clientY;
-          const dx = touch.clientX - joystick.bx;
-          const dy = touch.clientY - joystick.by;
-          const dead = 12;
-          keys['ArrowLeft']  = dx < -dead;
-          keys['ArrowRight'] = dx >  dead;
-          keys['ArrowUp']    = dy < -dead;
-          keys['ArrowDown']  = dy >  dead;
-        }
+      for (const t of e.changedTouches) {
+        if (t.identifier !== joyTouchId) continue;
+        joyTouchId = null;
+        joyThumb.style.transform = 'translate(0,0)';
+        keys['ArrowLeft']=keys['ArrowRight']=keys['ArrowUp']=keys['ArrowDown']=false;
       }
     }, { passive: false });
 
-    canvas.addEventListener('touchend', e => {
+    sprintDom.addEventListener('touchstart', e => {
       e.preventDefault();
-      for (const touch of e.changedTouches) {
-        if (joystick && touch.identifier === joystick.id) {
-          joystick = null;
-          keys['ArrowLeft']=keys['ArrowRight']=keys['ArrowUp']=keys['ArrowDown']=false;
-        }
-      }
+      isSprinting = !isSprinting;
+      setSprintDom(isSprinting);
     }, { passive: false });
 
     // ── Update ─────────────────────────────────────────────────────────────────
@@ -540,7 +566,7 @@
       if(moving) player.angle=Math.atan2(mvy,mvx);
 
       // Sprint logic
-      if(isSprinting && sprintMeter<=0) isSprinting=false;
+      if(isSprinting && sprintMeter<=0){ isSprinting=false; setSprintDom(false); }
       const sprintActive = isSprinting && sprintMeter>0;
       const curSpeed = sprintActive ? BASE_SPEED*SPRINT_MULT : BASE_SPEED;
       player.speed = curSpeed;
@@ -766,38 +792,10 @@
       ctx.fillText('HEALTH',14,470);
       ctx.textAlign='right';ctx.fillText('INFECT',788,470);ctx.textAlign='left';
 
-      // Sprint button (mobile, bottom-right)
-      if(state==='playing'){
-        const {x:bx,y:by,r:br}=SPRINT_BTN;
-        ctx.beginPath();ctx.arc(bx,by,br,0,Math.PI*2);
-        ctx.fillStyle=isSprinting?'rgba(255,200,40,0.35)':'rgba(80,160,255,0.15)';ctx.fill();
-        ctx.strokeStyle=isSprinting?'rgba(255,200,40,0.8)':'rgba(80,160,255,0.4)';ctx.lineWidth=2;ctx.stroke();
-        ctx.fillStyle=isSprinting?'rgba(255,220,80,1)':'rgba(120,180,255,0.7)';
-        ctx.font='bold 11px monospace';ctx.textAlign='center';ctx.textBaseline='middle';
-        ctx.fillText(isSprinting?'⚡ON':'⚡',bx,by);
-        ctx.textBaseline='alphabetic';ctx.textAlign='left';
-      }
 
       // Body map
       drawBodyMap();
 
-      // Virtual joystick
-      if (joystick && state==='playing') {
-        const rect=canvas.getBoundingClientRect();
-        const sx=800/rect.width, sy=500/rect.height;
-        const jx=(joystick.bx-rect.left)*sx, jy=(joystick.by-rect.top)*sy;
-        const kxRaw=(joystick.cx-rect.left)*sx, kyRaw=(joystick.cy-rect.top)*sy;
-        const ddx=kxRaw-jx, ddy=kyRaw-jy, dd=Math.sqrt(ddx*ddx+ddy*ddy)||1;
-        const maxR=40;
-        const kx=jx+(dd>maxR?(ddx/dd)*maxR:ddx);
-        const ky=jy+(dd>maxR?(ddy/dd)*maxR:ddy);
-        ctx.beginPath();ctx.arc(jx,jy,maxR,0,Math.PI*2);
-        ctx.fillStyle='rgba(255,255,255,0.07)';ctx.fill();
-        ctx.strokeStyle='rgba(255,255,255,0.18)';ctx.lineWidth=2;ctx.stroke();
-        ctx.beginPath();ctx.arc(kx,ky,18,0,Math.PI*2);
-        ctx.fillStyle='rgba(255,255,255,0.22)';ctx.fill();
-        ctx.strokeStyle='rgba(255,255,255,0.38)';ctx.lineWidth=2;ctx.stroke();
-      }
 
       // ── Upgrade screen ─────────────────────────────────────────────────────
       if(state==='upgrade'){
