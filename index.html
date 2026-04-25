@@ -20,8 +20,6 @@
     #ui { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; font-size: 13px; max-width: 100%; width: min(800px, 100vw); padding: 0 4px; }
     #zone-name { font-size: 14px; letter-spacing: 3px; color: #aaa; }
     #message { margin-top: 6px; font-size: 11px; color: #333; text-align: center; }
-    #shop-btn { background: rgba(30,20,5,0.85); border: 1px solid #555; color: #aaa; font-family: monospace; font-size: 12px; letter-spacing: 2px; cursor: pointer; padding: 3px 12px; transition: border-color 0.15s, color 0.15s; }
-    #shop-btn:hover { border-color: #ffcc44; color: #ffcc44; }
     #game { max-width: 100%; height: auto; display: block; touch-action: none; }
     @media (max-height: 520px) { #message { display: none; } }
     #controls { display: none; width: min(800px, 100vw); align-items: center; justify-content: space-between; padding: 10px 24px; margin-top: 2px; }
@@ -31,13 +29,15 @@
     #joystick-thumb { width: 40px; height: 40px; border-radius: 50%; background: rgba(255,255,255,0.22); border: 2px solid rgba(255,255,255,0.4); position: absolute; pointer-events: none; }
     #sprint-dom { width: 76px; height: 76px; border-radius: 50%; background: rgba(80,160,255,0.12); border: 2px solid rgba(80,160,255,0.35); color: rgba(120,180,255,0.75); font-size: 22px; cursor: pointer; font-family: monospace; touch-action: none; transition: background 0.1s, border-color 0.1s; }
     #sprint-dom.on { background: rgba(255,200,40,0.32); border-color: rgba(255,200,40,0.8); color: rgba(255,220,80,1); }
+    #menu-btn { background: rgba(20,20,20,0.85); border: 1px solid #444; color: #666; font-family: monospace; font-size: 11px; letter-spacing: 1px; cursor: pointer; padding: 2px 8px; }
+    #menu-btn:hover { border-color: #aaa; color: #aaa; }
   </style>
 </head>
 <body>
   <div id="ui">
-    <span>❤ HEALTH: <span id="hval">100</span></span>
+    <span><button id="menu-btn" onclick="goToMenu()">≡ MENU</button> &nbsp;❤ <span id="hval">100</span></span>
+    <span>🪙 <span id="tokval">500</span> &nbsp;·&nbsp; ⏱ <span id="tval">0.0s</span></span>
     <span id="zone-name">BLOODSTREAM</span>
-    <span>🪙 <span id="tokval">500</span> &nbsp;·&nbsp; ⏱ <span id="tval">0.0s</span> &nbsp;·&nbsp; <button id="shop-btn" onclick="toggleShop()">SHOP</button></span>
   </div>
   <canvas id="game" width="800" height="500"></canvas>
   <div id="controls">
@@ -50,7 +50,8 @@
   <script>
     const canvas = document.getElementById('game');
     const ctx = canvas.getContext('2d');
-    let state = 'playing'; // playing | upgrade | shop | dead | spread
+    let state = 'menu'; // menu | playing | upgrade | shop | dead | spread
+    let shopReturnState = 'menu';
     let tick = 0;
     let flashTimer = 0;
 
@@ -78,8 +79,20 @@
     }
 
     function toggleShop(){
-      if(state==='playing'){ state='shop'; document.getElementById('shop-btn').textContent='CLOSE'; }
-      else if(state==='shop'){ state='playing'; document.getElementById('shop-btn').textContent='SHOP'; }
+      if(state==='menu'||state==='playing'){ shopReturnState=state; state='shop'; }
+      else if(state==='shop'){ state=shopReturnState; }
+    }
+
+    let gameInProgress = false;
+
+    function startGame(){
+      state='playing';
+      gameInProgress=true;
+      document.getElementById('zone-name').textContent=zone.name;
+    }
+
+    function goToMenu(){
+      if(state==='playing'||state==='upgrade') state='menu';
     }
 
     // ── Skin draw functions (called with ctx already translated+rotated) ────────
@@ -192,7 +205,7 @@
     }
 
     document.addEventListener('keydown', e => {
-      if(e.key==='s'||e.key==='S') { toggleShop(); return; }
+      if((e.key==='s'||e.key==='S')&&(state==='menu'||state==='shop')) { toggleShop(); return; }
 
       if(state==='shop'){
         if(e.key==='ArrowRight') shopCursor=(shopCursor+1)%SKINS.length;
@@ -204,7 +217,7 @@
           if(ownedSkins.includes(sk.id)){ equippedSkin=sk.id; saveShop(); }
           else if(tokens>=sk.cost){ tokens-=sk.cost; ownedSkins.push(sk.id); equippedSkin=sk.id; saveShop(); }
         }
-        else if(e.key==='Escape') state='playing';
+        else if(e.key==='Escape'){ state=shopReturnState; }
         return;
       }
 
@@ -419,14 +432,22 @@
       sprintMeter=100;isSprinting=false;setSprintDom(false);stillTicks=0;
       player.x=400;player.y=250;player.health=100;player.infection=0;player.inv=0;player.angle=0;player.speed=BASE_SPEED;
       portals=makePortals();buildBG();refillNutrients();refillWBCs();refillEliteWBCs();wbcTimer=0;
-      startTime=Date.now();elapsedMs=0;tokensEarnedThisRun=0;state='playing';
+      startTime=Date.now();elapsedMs=0;tokensEarnedThisRun=0;gameInProgress=false;state='menu';
       document.getElementById('zone-name').textContent=zone.name;
       document.getElementById('tokval').textContent=tokens;
     }
 
     document.addEventListener('keydown',e=>{
-      if((e.key==='r'||e.key==='R')&&(state==='dead'||state==='spread')) reset();
+      if((e.key==='r'||e.key==='R')&&(state==='dead'||state==='spread')){ reset(); return; }
+      if(e.key==='Enter'||e.key===' '){if(state==='menu'){startGame();return;}}
+      if(e.key==='Escape'&&state==='playing'){ goToMenu(); return; }
       if(e.key==='Shift'){ isSprinting=!isSprinting; setSprintDom(isSprinting); }
+    });
+
+    canvas.addEventListener('contextmenu', e => {
+      e.preventDefault();
+      if(state!=='playing') return;
+      isSprinting=!isSprinting; setSprintDom(isSprinting);
     });
 
     // ── Touch helpers ──────────────────────────────────────────────────────────
@@ -438,9 +459,23 @@
       };
     }
 
+    function handleMenuInput(pos){
+      if(gameInProgress){
+        if(pos.x>=275&&pos.x<=525&&pos.y>=214&&pos.y<=270){ startGame(); return; }
+        if(pos.x>=275&&pos.x<=525&&pos.y>=282&&pos.y<=332){ reset(); startGame(); return; }
+        if(pos.x>=300&&pos.x<=500&&pos.y>=346&&pos.y<=392){ toggleShop(); return; }
+      } else {
+        if(pos.x>=275&&pos.x<=525&&pos.y>=248&&pos.y<=310){ startGame(); return; }
+        if(pos.x>=300&&pos.x<=500&&pos.y>=330&&pos.y<=378){ toggleShop(); return; }
+      }
+    }
+
     canvas.addEventListener('click', e => {
-      if(state !== 'shop') return;
       const pos = getCanvasPos(e);
+      if(state==='menu'){ handleMenuInput(pos); return; }
+      if(state==='dead'  && pos.x>=300&&pos.x<=500&&pos.y>=295&&pos.y<=341){ reset(); return; }
+      if(state==='spread'&& pos.x>=300&&pos.x<=500&&pos.y>=284&&pos.y<=330){ reset(); return; }
+      if(state !== 'shop') return;
       if(pos.x>=316 && pos.x<=484 && pos.y>=68 && pos.y<=98){ toggleShop(); return; }
       SKINS.forEach((sk,i)=>{
         const col=i%4, row=Math.floor(i/4);
@@ -460,7 +495,9 @@
       const touch = e.changedTouches[0];
       const pos = getCanvasPos(touch);
 
-      if (state === 'dead' || state === 'spread') { reset(); return; }
+      if (state === 'menu') { handleMenuInput(pos); return; }
+      if(state==='dead'  && pos.x>=300&&pos.x<=500&&pos.y>=295&&pos.y<=341){ reset(); return; }
+      if(state==='spread'&& pos.x>=300&&pos.x<=500&&pos.y>=284&&pos.y<=330){ reset(); return; }
 
       if (state === 'upgrade') {
         upgradeOptions.forEach((u, i) => {
@@ -497,6 +534,7 @@
     const sprintDom = document.getElementById('sprint-dom');
     let joyTouchId = null;
     const JOY_R = 38;
+    let joyVec = { x: 0, y: 0, active: false };
 
     function setSprintDom(on) { sprintDom.classList.toggle('on', on); }
 
@@ -517,10 +555,11 @@
         const clamped = Math.min(d, JOY_R);
         joyThumb.style.transform = `translate(${dx/d*clamped}px,${dy/d*clamped}px)`;
         const dead = 10;
-        keys['ArrowLeft']  = dx < -dead;
-        keys['ArrowRight'] = dx >  dead;
-        keys['ArrowUp']    = dy < -dead;
-        keys['ArrowDown']  = dy >  dead;
+        if (d > dead) {
+          joyVec.x = dx / d; joyVec.y = dy / d; joyVec.active = true;
+        } else {
+          joyVec.x = 0; joyVec.y = 0; joyVec.active = false;
+        }
       }
     }, { passive: false });
 
@@ -530,7 +569,7 @@
         if (t.identifier !== joyTouchId) continue;
         joyTouchId = null;
         joyThumb.style.transform = 'translate(0,0)';
-        keys['ArrowLeft']=keys['ArrowRight']=keys['ArrowUp']=keys['ArrowDown']=false;
+        joyVec.x = 0; joyVec.y = 0; joyVec.active = false;
       }
     }, { passive: false });
 
@@ -542,16 +581,18 @@
 
     // ── Update ─────────────────────────────────────────────────────────────────
     function update(){
-      if(state==='upgrade'||state==='shop'||state==='dead'||state==='spread') return;
+      if(state==='menu'||state==='upgrade'||state==='shop'||state==='dead'||state==='spread') return;
       tick++;
       if(flashTimer>0) flashTimer--;
       elapsedMs=Date.now()-startTime;
 
-      // Movement — mouse follow on PC, WASD fallback
+      // Movement — joystick analog (mobile) · mouse follow (PC) · WASD fallback
       let mvx = 0, mvy = 0;
       const dxM = mouse.cx - player.x, dyM = mouse.cy - player.y;
       const distM = Math.sqrt(dxM*dxM + dyM*dyM);
-      if (mouse.active && distM > 8) {
+      if (joyVec.active) {
+        mvx = joyVec.x; mvy = joyVec.y;
+      } else if (mouse.active && distM > 8) {
         mvx = dxM / distM; mvy = dyM / distM;
       } else if (!mouse.active) {
         const ml=(keys['ArrowLeft'] ||keys['a']||keys['A'])?1:0;
@@ -880,9 +921,51 @@
         ctx.font='17px monospace';ctx.fillStyle='#888';ctx.fillText('The immune system destroyed you.',400,215);
         ctx.font='14px monospace';ctx.fillStyle='#555';ctx.fillText(`Time: ${(elapsedMs/1000).toFixed(1)}s`,400,248);
         if(tokensEarnedThisRun>0){ctx.fillStyle='#ffcc44';ctx.font='14px monospace';ctx.fillText(`+${tokensEarnedThisRun} 🪙 tokens saved · total: ${tokens}`,400,275);}
-        ctx.fillStyle='#444';ctx.fillText('Tap screen · or press R to try again',400,310);
+        ctx.fillStyle='rgba(60,15,15,0.95)';ctx.fillRect(300,295,200,46);
+        ctx.strokeStyle='rgba(220,40,60,0.8)';ctx.lineWidth=2;ctx.strokeRect(300,295,200,46);
+        ctx.fillStyle='#ff6677';ctx.font='bold 15px monospace';ctx.fillText('→  GO TO MENU',400,325);
+        ctx.fillStyle='#333';ctx.font='11px monospace';ctx.fillText('or press R',400,360);
         ctx.textAlign='left';
       }
+      // ── Main Menu ────────────────────────────────────────────────────────────
+      if(state==='menu'){
+        ctx.fillStyle='rgba(0,0,0,0.93)';ctx.fillRect(0,0,800,500);
+        ctx.textAlign='center';
+        ctx.shadowColor='#33ff44';ctx.shadowBlur=40;
+        ctx.font='bold 80px monospace';ctx.fillStyle='#33ff44';ctx.fillText('PARASITE',400,118);
+        ctx.shadowBlur=0;
+        ctx.font='13px monospace';ctx.fillStyle='#444';ctx.fillText('Navigate the bloodstream. Infect the host.',400,148);
+        if(bestTime){ctx.fillStyle='#ffcc44';ctx.font='13px monospace';ctx.fillText(`⏱ Best: ${bestTime.toFixed(1)}s`,400,174);}
+        ctx.fillStyle='#555';ctx.font='12px monospace';ctx.fillText(`🪙 ${tokens} tokens`,400,194);
+
+        if(gameInProgress){
+          // RESUME
+          ctx.fillStyle='rgba(20,60,15,0.95)';ctx.fillRect(275,214,250,56);
+          ctx.strokeStyle='rgba(80,220,80,0.85)';ctx.lineWidth=2.5;ctx.strokeRect(275,214,250,56);
+          ctx.fillStyle='#88ff44';ctx.font='bold 22px monospace';ctx.fillText('▶  RESUME',400,250);
+          // NEW GAME
+          ctx.fillStyle='rgba(50,20,5,0.95)';ctx.fillRect(275,282,250,50);
+          ctx.strokeStyle='rgba(220,100,30,0.75)';ctx.lineWidth=2;ctx.strokeRect(275,282,250,50);
+          ctx.fillStyle='#ff8833';ctx.font='bold 18px monospace';ctx.fillText('↺  NEW GAME',400,314);
+          // SHOP
+          ctx.fillStyle='rgba(40,30,5,0.9)';ctx.fillRect(300,346,200,46);
+          ctx.strokeStyle='rgba(255,180,40,0.7)';ctx.lineWidth=2;ctx.strokeRect(300,346,200,46);
+          ctx.fillStyle='#ffcc44';ctx.font='bold 16px monospace';ctx.fillText('🪙  SHOP',400,376);
+          ctx.fillStyle='#2a2a2a';ctx.font='11px monospace';ctx.fillText('ESC or ≡ MENU during play to return here',400,430);
+        } else {
+          // PLAY
+          ctx.fillStyle='rgba(20,60,15,0.95)';ctx.fillRect(275,248,250,62);
+          ctx.strokeStyle='rgba(80,220,80,0.85)';ctx.lineWidth=2.5;ctx.strokeRect(275,248,250,62);
+          ctx.fillStyle='#88ff44';ctx.font='bold 24px monospace';ctx.fillText('▶  PLAY',400,288);
+          // SHOP
+          ctx.fillStyle='rgba(40,30,5,0.9)';ctx.fillRect(300,330,200,48);
+          ctx.strokeStyle='rgba(255,180,40,0.7)';ctx.lineWidth=2;ctx.strokeRect(300,330,200,48);
+          ctx.fillStyle='#ffcc44';ctx.font='bold 17px monospace';ctx.fillText('🪙  SHOP',400,362);
+          ctx.fillStyle='#2a2a2a';ctx.font='11px monospace';ctx.fillText('ENTER or tap PLAY to start · S to open shop',400,424);
+        }
+        ctx.textAlign='left';
+      }
+
       if(state==='spread'){
         ctx.fillStyle='rgba(0,0,0,0.78)';ctx.fillRect(0,0,800,500);
         ctx.textAlign='center';
@@ -891,8 +974,11 @@
         ctx.font='18px monospace';ctx.fillStyle='#aaffcc';ctx.fillText(`Time: ${t.toFixed(1)}s`,400,185);
         if(bestTime&&t<=bestTime){ctx.fillStyle='#ffdd44';ctx.font='15px monospace';ctx.fillText(`NEW BEST: ${bestTime.toFixed(1)}s`,400,212);}
         ctx.fillStyle='#ffcc44';ctx.font='15px monospace';ctx.fillText(`+${tokensEarnedThisRun} 🪙 tokens earned this run`,400,242);
-        ctx.fillStyle='#aaffcc';ctx.font='13px monospace';ctx.fillText(`Bank: ${tokens} tokens total · Press S to spend them`,400,268);
-        ctx.fillStyle='#444';ctx.font='13px monospace';ctx.fillText('Tap screen · or press R to infect again',400,300);
+        ctx.fillStyle='#aaffcc';ctx.font='13px monospace';ctx.fillText(`Bank: ${tokens} tokens total · open Shop from the menu`,400,268);
+        ctx.fillStyle='rgba(10,50,25,0.95)';ctx.fillRect(300,284,200,46);
+        ctx.strokeStyle='rgba(60,220,120,0.8)';ctx.lineWidth=2;ctx.strokeRect(300,284,200,46);
+        ctx.fillStyle='#44ff88';ctx.font='bold 15px monospace';ctx.fillText('→  GO TO MENU',400,314);
+        ctx.fillStyle='#333';ctx.font='11px monospace';ctx.fillText('or press R',400,348);
         ctx.textAlign='left';
       }
     }
