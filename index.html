@@ -1045,8 +1045,23 @@
     window.addEventListener('orientationchange', () => setTimeout(mobileResize, 150));
     mobileResize();
 
-    function loop(){update();draw();requestAnimationFrame(loop);}
-    loop();
+    const TARGET_MS = 1000 / 60; // 60 fps logic cap
+    let lastFrameTime = 0;
+    let accumulator = 0;
+    function loop(timestamp) {
+      requestAnimationFrame(loop);
+      const delta = Math.min(timestamp - lastFrameTime, 100); // clamp to avoid spiral of death
+      lastFrameTime = timestamp;
+      accumulator += delta;
+      let stepped = false;
+      while (accumulator >= TARGET_MS) {
+        update();
+        accumulator -= TARGET_MS;
+        stepped = true;
+      }
+      if (stepped) draw();
+    }
+    requestAnimationFrame(loop);
 
     // Register service worker for PWA / offline support
     if ('serviceWorker' in navigator) {
