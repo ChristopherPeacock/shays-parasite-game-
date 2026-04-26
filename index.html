@@ -29,17 +29,37 @@
       body { justify-content: flex-start; align-items: flex-start; }
       #ui { position: fixed; top: 0; left: 0; right: 0; z-index: 30; width: 100%; max-width: 100%; background: rgba(0,0,0,0.88); padding: 3px 8px; font-size: 11px; margin-bottom: 0; box-sizing: border-box; }
       #game-wrap { position: fixed; top: 28px; left: 0; right: 0; bottom: 0; z-index: 1; display: flex; align-items: center; justify-content: center; background: #000; }
-      #game { display: block; touch-action: none; }
-      #controls { display: flex; position: fixed; bottom: 0; left: 0; right: 0; z-index: 20; height: 120px; background: rgba(0,0,0,0.72); padding: 8px 24px; padding-bottom: max(8px, env(safe-area-inset-bottom)); box-sizing: border-box; }
+      #game { display: block; touch-action: none; width: 100%; max-width: min(100vw, calc((100dvh - 124px) * 1.6)); height: auto; }
+      #controls { display: flex; position: fixed; bottom: 0; left: 0; right: 0; z-index: 20; height: 96px; background: rgba(0,0,0,0.72); padding: 6px 20px; padding-bottom: max(6px, env(safe-area-inset-bottom)); box-sizing: border-box; }
       #message { display: none; }
     }
     @media (hover: none) and (pointer: coarse) and (orientation: portrait) {
       #rotate-hint { display: flex; }
     }
-    #joystick-zone { width: 140px; height: 100%; display: flex; align-items: center; justify-content: center; touch-action: none; }
-    #joystick-ring { width: 104px; height: 104px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.22); background: rgba(255,255,255,0.07); position: relative; display: flex; align-items: center; justify-content: center; }
-    #joystick-thumb { width: 48px; height: 48px; border-radius: 50%; background: rgba(255,255,255,0.25); border: 2px solid rgba(255,255,255,0.45); position: absolute; pointer-events: none; }
-    #sprint-dom { width: 90px; height: 90px; border-radius: 50%; background: rgba(80,160,255,0.12); border: 2px solid rgba(80,160,255,0.35); color: rgba(120,180,255,0.75); font-size: 28px; cursor: pointer; font-family: monospace; touch-action: none; transition: background 0.1s, border-color 0.1s; display: flex; align-items: center; justify-content: center; }
+    /* ── iPhone SE 2nd/3rd gen landscape (667×375) ── */
+    @media (hover: none) and (pointer: coarse) and (max-height: 375px) {
+      #game { max-width: min(100vw, calc((100dvh - 100px) * 1.6)); }
+      #controls { height: 72px; padding: 5px 16px; padding-bottom: max(5px, env(safe-area-inset-bottom)); }
+      #joystick-zone { width: 84px; }
+      #joystick-ring { width: 68px; height: 68px; }
+      #joystick-thumb { width: 28px; height: 28px; }
+      #sprint-dom { width: 58px; height: 58px; font-size: 18px; }
+    }
+    /* ── iPhone SE 1st gen landscape (568×320) ── */
+    @media (hover: none) and (pointer: coarse) and (max-height: 340px) {
+      #ui { font-size: 9px; padding: 1px 4px; }
+      #game { max-width: min(100vw, calc((100dvh - 86px) * 1.6)); }
+      #controls { height: 58px; padding: 3px 12px; padding-bottom: max(3px, env(safe-area-inset-bottom)); }
+      #joystick-zone { width: 70px; }
+      #joystick-ring { width: 54px; height: 54px; }
+      #joystick-thumb { width: 22px; height: 22px; }
+      #sprint-dom { width: 46px; height: 46px; font-size: 15px; }
+      #drag-hint { display: none; }
+    }
+    #joystick-zone { width: 100px; height: 100%; display: flex; align-items: center; justify-content: center; touch-action: none; }
+    #joystick-ring { width: 80px; height: 80px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.22); background: rgba(255,255,255,0.07); position: relative; display: flex; align-items: center; justify-content: center; }
+    #joystick-thumb { width: 34px; height: 34px; border-radius: 50%; background: rgba(255,255,255,0.25); border: 2px solid rgba(255,255,255,0.45); position: absolute; pointer-events: none; }
+    #sprint-dom { width: 68px; height: 68px; border-radius: 50%; background: rgba(80,160,255,0.12); border: 2px solid rgba(80,160,255,0.35); color: rgba(120,180,255,0.75); font-size: 22px; cursor: pointer; font-family: monospace; touch-action: none; transition: background 0.1s, border-color 0.1s; display: flex; align-items: center; justify-content: center; }
     #sprint-dom.on { background: rgba(255,200,40,0.32); border-color: rgba(255,200,40,0.8); color: rgba(255,220,80,1); }
     #rotate-hint { display: none; position: fixed; inset: 0; background: #000; z-index: 999; flex-direction: column; align-items: center; justify-content: center; font-family: monospace; text-align: center; gap: 10px; }
     #menu-btn { background: rgba(20,20,20,0.85); border: 1px solid #444; color: #666; font-family: monospace; font-size: 11px; letter-spacing: 1px; cursor: pointer; padding: 2px 8px; }
@@ -56,7 +76,7 @@
     <canvas id="game" width="800" height="500"></canvas>
     <div id="controls">
       <div id="joystick-zone"><div id="joystick-ring"><div id="joystick-thumb"></div></div></div>
-      <div style="font-size:9px;color:#444;letter-spacing:2px;text-align:center">DRAG<br>TO MOVE</div>
+      <div id="drag-hint" style="font-size:9px;color:#444;letter-spacing:2px;text-align:center">DRAG<br>TO MOVE</div>
       <button id="sprint-dom">⚡</button>
     </div>
   </div>
@@ -554,7 +574,7 @@
     const joyThumb = document.getElementById('joystick-thumb');
     const sprintDom = document.getElementById('sprint-dom');
     let joyTouchId = null;
-    const JOY_R = 46;
+    function getJoyR() { return joyRing.offsetWidth / 2 - joyThumb.offsetWidth / 2; }
     let joyVec = { x: 0, y: 0, active: false };
 
     function setSprintDom(on) { sprintDom.classList.toggle('on', on); }
@@ -573,7 +593,7 @@
         const cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
         const dx = t.clientX - cx, dy = t.clientY - cy;
         const d = Math.sqrt(dx*dx + dy*dy) || 1;
-        const clamped = Math.min(d, JOY_R);
+        const clamped = Math.min(d, getJoyR());
         joyThumb.style.transform = `translate(${dx/d*clamped}px,${dy/d*clamped}px)`;
         const dead = 10;
         if (d > dead) {
