@@ -706,7 +706,7 @@
       tick++;
       if(flashTimer>0) flashTimer--;
       elapsedMs=Date.now()-startTime;
-      if(elapsedMs>=120000){ state='pooped'; poopTick=0; return; }
+      if(elapsedMs>=180000){ state='pooped'; poopTick=0; return; }
 
       // Movement — joystick analog (mobile) · mouse follow (PC) · WASD fallback
       let mvx = 0, mvy = 0;
