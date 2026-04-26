@@ -143,13 +143,13 @@
     if(!parasiteUsername) usernameModal.classList.add('visible');
 
     const SKINS = [
-      { id:'TOXO',    name:'TOXOPLASMA',  cost:0,   desc:'The classic crescent',    draw: drawToxo    },
-      { id:'GOLDEN',  name:'GOLDEN CYST', cost:100, desc:'Gilded parasite royalty',  draw: drawGolden  },
-      { id:'NEON',    name:'NEON PULSE',  cost:150, desc:'Electric blue organism',   draw: drawNeon    },
-      { id:'BLOOD',   name:'BLOOD WORM',  cost:200, desc:'Born deep in the veins',   draw: drawBlood   },
-      { id:'SHADOW',  name:'SHADOW CELL', cost:250, desc:'Void parasite from beyond',draw: drawShadow  },
-      { id:'PRISM',   name:'PRISM',       cost:300, desc:'Chromatic mutation',        draw: drawPrism   },
-      { id:'CRYSTAL', name:'CRYSTAL',     cost:350, desc:'Transparent horror',        draw: drawCrystal },
+      { id:'TOXO',    name:'TOXOPLASMA',  cost:0,   desc:'The classic crescent',     ability:'TURBO SPRINT',          draw: drawToxo    },
+      { id:'GOLDEN',  name:'GOLDEN CYST', cost:100, desc:'Gilded parasite royalty',  ability:'STUNS WBCs ON CONTACT', draw: drawGolden  },
+      { id:'NEON',    name:'NEON PULSE',  cost:150, desc:'Electric blue organism',   ability:'50% BULLET RESISTANCE', draw: drawNeon    },
+      { id:'BLOOD',   name:'BLOOD WORM',  cost:200, desc:'Born deep in the veins',   ability:'+8HP PER NUTRIENT',     draw: drawBlood   },
+      { id:'SHADOW',  name:'SHADOW CELL', cost:250, desc:'Void parasite from beyond',ability:'COMING SOON',           draw: drawShadow  },
+      { id:'PRISM',   name:'PRISM',       cost:300, desc:'Chromatic mutation',        ability:'COMING SOON',           draw: drawPrism   },
+      { id:'CRYSTAL', name:'CRYSTAL',     cost:350, desc:'Transparent horror',        ability:'COMING SOON',           draw: drawCrystal },
     ];
 
     function saveShop(){
@@ -588,12 +588,14 @@
       if(state==='scoreboard'&&pos.x>=300&&pos.x<=500&&pos.y>=442&&pos.y<=478){ state='menu'; return; }
       if(state==='pooped'&&poopTick>150&&pos.x>=275&&pos.x<=525&&pos.y>=430&&pos.y<=474){ reset(); return; }
       if(state==='dead'  && pos.x>=300&&pos.x<=500&&pos.y>=295&&pos.y<=341){ reset(); return; }
+      if(state==='dead'  && pos.x>=300&&pos.x<=500&&pos.y>=354&&pos.y<=392){ reset(); state='scoreboard'; return; }
       if(state==='spread'&& pos.x>=300&&pos.x<=500&&pos.y>=284&&pos.y<=330){ reset(); return; }
+      if(state==='spread'&& pos.x>=300&&pos.x<=500&&pos.y>=343&&pos.y<=381){ reset(); state='scoreboard'; return; }
       if(state !== 'shop') return;
       if(pos.x>=316 && pos.x<=484 && pos.y>=68 && pos.y<=98){ toggleShop(); return; }
       SKINS.forEach((sk,i)=>{
         const col=i%4, row=Math.floor(i/4);
-        const bw=168,bh=130,gap=12;
+        const bw=168,bh=148,gap=12;
         const startX=(800-(4*(bw+gap)-gap))/2;
         const bx=startX+col*(bw+gap), by=106+row*(bh+gap);
         if(pos.x>=bx&&pos.x<=bx+bw&&pos.y>=by&&pos.y<=by+bh){
@@ -613,7 +615,9 @@
       if(state==='scoreboard'&&pos.x>=300&&pos.x<=500&&pos.y>=442&&pos.y<=478){ state='menu'; return; }
       if(state==='pooped'&&poopTick>150&&pos.x>=275&&pos.x<=525&&pos.y>=430&&pos.y<=474){ reset(); return; }
       if(state==='dead'  && pos.x>=300&&pos.x<=500&&pos.y>=295&&pos.y<=341){ reset(); return; }
+      if(state==='dead'  && pos.x>=300&&pos.x<=500&&pos.y>=354&&pos.y<=392){ reset(); state='scoreboard'; return; }
       if(state==='spread'&& pos.x>=300&&pos.x<=500&&pos.y>=284&&pos.y<=330){ reset(); return; }
+      if(state==='spread'&& pos.x>=300&&pos.x<=500&&pos.y>=343&&pos.y<=381){ reset(); state='scoreboard'; return; }
 
       if (state === 'upgrade') {
         upgradeOptions.forEach((u, i) => {
@@ -1109,6 +1113,14 @@
       ctx.fillStyle='rgba(150,150,150,0.6)';ctx.font='9px monospace';
       ctx.fillText('HEALTH',14,470);
       ctx.textAlign='right';ctx.fillText('HOST HP',788,470);ctx.textAlign='left';
+      // Active skin ability indicator
+      const _activeSkin=SKINS.find(s=>s.id===equippedSkin);
+      if(_activeSkin&&_activeSkin.ability&&_activeSkin.ability!=='COMING SOON'){
+        ctx.font='9px monospace';ctx.textAlign='center';
+        ctx.fillStyle='rgba(50,220,170,0.55)';
+        ctx.fillText(`⚡ ${_activeSkin.name}: ${_activeSkin.ability}`,400,462);
+        ctx.textAlign='left';
+      }
       // Antibiotic active warning
       if(antibiotics.some(a=>a.zoneIdx===zoneIndex)){
         ctx.fillStyle=`rgba(0,200,255,${0.45+Math.sin(tick*0.15)*0.4})`;
@@ -1158,7 +1170,7 @@
         // 4 per row
         SKINS.forEach((sk,i)=>{
           const col=i%4, row=Math.floor(i/4);
-          const bw=168,bh=130,gap=12;
+          const bw=168,bh=148,gap=12;
           const totalW=4*(bw+gap)-gap, startX=(800-totalW)/2;
           const bx=startX+col*(bw+gap), by=106+row*(bh+gap);
           const owned=ownedSkins.includes(sk.id);
@@ -1192,6 +1204,12 @@
             ctx.fillText(sk.cost===0?'FREE':`🪙 ${sk.cost}`,bx+bw/2,by+103);
             if(!canAfford){ctx.fillStyle='#553322';ctx.font='9px monospace';ctx.fillText('not enough tokens',bx+bw/2,by+116);}
           }
+          // ability
+          if(sk.ability){
+            const abilityColor=sk.ability==='COMING SOON'?'#444455':'#33ddaa';
+            ctx.fillStyle=abilityColor;ctx.font=`${sk.ability==='COMING SOON'?'italic ':''}9px monospace`;
+            ctx.fillText(sk.ability,bx+bw/2,by+133);
+          }
         });
         ctx.textAlign='left';
       }
@@ -1207,7 +1225,10 @@
         ctx.fillStyle='rgba(60,15,15,0.95)';ctx.fillRect(300,295,200,46);
         ctx.strokeStyle='rgba(220,40,60,0.8)';ctx.lineWidth=2;ctx.strokeRect(300,295,200,46);
         ctx.fillStyle='#ff6677';ctx.font='bold 15px monospace';ctx.fillText('→  GO TO MENU',400,325);
-        ctx.fillStyle='#333';ctx.font='11px monospace';ctx.fillText('or press R',400,360);
+        ctx.fillStyle='rgba(5,20,40,0.9)';ctx.fillRect(300,354,200,38);
+        ctx.strokeStyle='rgba(40,140,255,0.7)';ctx.lineWidth=2;ctx.strokeRect(300,354,200,38);
+        ctx.fillStyle='#44aaff';ctx.font='bold 14px monospace';ctx.fillText('📊  VIEW SCORES',400,379);
+        ctx.fillStyle='#333';ctx.font='11px monospace';ctx.fillText('or press R to restart',400,416);
         ctx.textAlign='left';
       }
       // ── Main Menu ────────────────────────────────────────────────────────────
@@ -1269,7 +1290,10 @@
         ctx.fillStyle='rgba(10,50,25,0.95)';ctx.fillRect(300,284,200,46);
         ctx.strokeStyle='rgba(60,220,120,0.8)';ctx.lineWidth=2;ctx.strokeRect(300,284,200,46);
         ctx.fillStyle='#44ff88';ctx.font='bold 15px monospace';ctx.fillText('→  GO TO MENU',400,314);
-        ctx.fillStyle='#333';ctx.font='11px monospace';ctx.fillText('or press R',400,348);
+        ctx.fillStyle='rgba(5,20,40,0.9)';ctx.fillRect(300,343,200,38);
+        ctx.strokeStyle='rgba(40,140,255,0.7)';ctx.lineWidth=2;ctx.strokeRect(300,343,200,38);
+        ctx.fillStyle='#44aaff';ctx.font='bold 14px monospace';ctx.fillText('📊  VIEW SCORES',400,368);
+        ctx.fillStyle='#333';ctx.font='11px monospace';ctx.fillText('or press R to restart',400,404);
         ctx.textAlign='left';
       }
 
@@ -1365,11 +1389,11 @@
         ctx.font='bold 36px monospace';ctx.fillStyle='#33ff44';ctx.textAlign='center';
         ctx.fillText('INFECTION LOG',400,48);
         ctx.shadowBlur=0;
-        ctx.font='10px monospace';ctx.fillStyle='rgba(50,180,50,0.45)';
+        ctx.font='10px monospace';ctx.fillStyle='rgba(80,200,80,0.6)';
         ctx.fillText('GLOBAL PARASITE ACTIVITY · LOCAL CACHE',400,66);
 
         // Username display
-        ctx.font='11px monospace';ctx.fillStyle='#336633';
+        ctx.font='11px monospace';ctx.fillStyle='#55aa55';
         ctx.fillText(`LOGGED IN AS: ${parasiteUsername||'UNKNOWN'}`,400,84);
 
         // Sort: wins by time asc, then deaths by time desc — compute once per render
@@ -1391,6 +1415,11 @@
           ctx.font='bold 10px monospace';ctx.fillStyle='#77cc77';ctx.textAlign='left';
           ctx.fillText(c.label,c.x,111);
         });
+        // Vertical column dividers
+        [cols[1].x,cols[2].x,cols[3].x,cols[4].x,cols[5].x].forEach(cx=>{
+          ctx.strokeStyle='rgba(40,120,40,0.25)';ctx.lineWidth=1;
+          ctx.beginPath();ctx.moveTo(cx-6,94);ctx.lineTo(cx-6,410);ctx.stroke();
+        });
 
         if(sbRows.length===0){
           ctx.textAlign='center';
@@ -1401,7 +1430,7 @@
           ctx.textAlign='left';
         } else {
           sbRows.forEach((r,i)=>{
-            const ry=132+i*24;
+            const ry=135+i*24;
             const isMe=r.u===parasiteUsername;
             const win=r.w===1;
             const expelled=r.d==='EXPELLED';
