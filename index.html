@@ -25,7 +25,7 @@
     @media (max-height: 520px) { #message { display: none; } }
     #controls { display: none; align-items: center; justify-content: space-between; width: 100%; box-sizing: border-box; }
     /* ── Mobile: canvas scaled to fit, controls overlay bottom ── */
-    @media (hover: none) and (pointer: coarse) {
+    @media (any-pointer: coarse) {
       body { justify-content: flex-start; align-items: flex-start; }
       #ui { position: fixed; top: 0; left: 0; right: 0; z-index: 30; width: 100%; max-width: 100%; background: rgba(0,0,0,0.88); padding: 3px 8px; font-size: 11px; margin-bottom: 0; box-sizing: border-box; }
       #game-wrap { position: fixed; top: 28px; left: 0; right: 0; bottom: 0; z-index: 1; display: flex; align-items: center; justify-content: center; background: #000; }
@@ -33,11 +33,11 @@
       #controls { display: flex; position: fixed; bottom: 0; left: 0; right: 0; z-index: 20; height: 96px; background: rgba(0,0,0,0.72); padding: 6px 20px; padding-bottom: max(6px, env(safe-area-inset-bottom)); box-sizing: border-box; }
       #message { display: none; }
     }
-    @media (hover: none) and (pointer: coarse) and (orientation: portrait) {
+    @media (any-pointer: coarse) and (orientation: portrait) {
       #rotate-hint { display: flex; }
     }
     /* ── iPhone SE 2nd/3rd gen landscape (667×375) ── */
-    @media (hover: none) and (pointer: coarse) and (max-height: 375px) {
+    @media (any-pointer: coarse) and (max-height: 375px) {
       #game { max-width: min(100vw, calc((100dvh - 100px) * 1.6)); }
       #controls { height: 72px; padding: 5px 16px; padding-bottom: max(5px, env(safe-area-inset-bottom)); }
       #joystick-zone { width: 84px; }
@@ -46,7 +46,7 @@
       #sprint-dom { width: 58px; height: 58px; font-size: 18px; }
     }
     /* ── iPhone SE 1st gen landscape (568×320) ── */
-    @media (hover: none) and (pointer: coarse) and (max-height: 340px) {
+    @media (any-pointer: coarse) and (max-height: 340px) {
       #ui { font-size: 9px; padding: 1px 4px; }
       #game { max-width: min(100vw, calc((100dvh - 86px) * 1.6)); }
       #controls { height: 58px; padding: 3px 12px; padding-bottom: max(3px, env(safe-area-inset-bottom)); }
@@ -1024,9 +1024,16 @@
       }
     }
 
+    // ── Lock landscape on Android touch devices ────────────────────────────────
+    if (window.matchMedia('(any-pointer: coarse)').matches) {
+      if (screen.orientation && screen.orientation.lock) {
+        screen.orientation.lock('landscape').catch(() => {});
+      }
+    }
+
     // ── Mobile canvas sizing ───────────────────────────────────────────────────
     function mobileResize() {
-      if (!window.matchMedia('(hover: none) and (pointer: coarse)').matches) return;
+      if (!window.matchMedia('(any-pointer: coarse)').matches) return;
       const uiH = 28;
       const availW = window.innerWidth;
       const availH = window.innerHeight - uiH;
